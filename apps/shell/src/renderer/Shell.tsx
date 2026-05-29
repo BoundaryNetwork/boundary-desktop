@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UserInfo } from "@boundary-desktop/contract";
 import type { ModuleEntry } from "../shared/types";
+import { runtime } from "./runtime";
 
-/** 基座壳:左侧导航栏(上=账号 + 模块入口、下=基座控件)+ 主区域容器。
- *  导航的模块入口来自 catalog 的 ui meta(激活前即可渲染);主区域在 Increment B
- *  由选中模块经 render(container) 挂载,本期先占位。 */
+/** 基座壳:左侧导航栏(上=账号 + 模块入口、下=基座控件)+ 主区域。
+ *  导航入口来自 catalog 的 ui meta;点入口 → ModuleView 挂载容器 + 激活模块,
+ *  模块经 render(container) 把界面画进主区域。 */
 export function Shell({ user }: { user: UserInfo }): JSX.Element {
   const [modules, setModules] = useState<ModuleEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
+    void runtime.start();
+    runtime.setNavigate(setActiveId);
     void window.hostApi.modules.list().then((list) => {
       setModules(list);
       setActiveId((cur) => cur ?? list[0]?.id ?? null);
@@ -53,18 +56,65 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
 
       <main className="content">
         {active ? (
-          <div className="content__placeholder">
-            <div className="content__placeholder-title">{active.ui?.displayName ?? active.id}</div>
-            <p className="content__placeholder-hint">
-              模块 <code>{active.id}</code> 将在此挂载（Increment B：renderer 加载 + render(container)）。
-            </p>
-          </div>
+          <ModuleView key={active.id} entry={active} />
         ) : (
           <div className="content__placeholder">
             <p className="content__placeholder-hint">未发现可用模块（检查 modules/ 目录）。</p>
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+/** 单个模块的挂载点:提供容器 → 激活模块(经 main Registry)→ 模块渲染进容器。
+ *  卸载(切换 tab)时停用模块。容器始终在 DOM 中,加载/失败用覆盖层提示。 */
+function ModuleView({ entry }: { entry: ModuleEntry }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    runtime.setContainer(entry.id, ref.current);
+    setPhase("loading");
+    setErr("");
+    let cancelled = false;
+    window.hostApi.modules.activate(entry.id).then(
+      () => {
+        if (!cancelled) setPhase("ready");
+      },
+      (e: unknown) => {
+        if (!cancelled) {
+          setPhase("error");
+          setErr(e instanceof Error ? e.message : String(e));
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+      void window.hostApi.modules.deactivate(entry.id);
+      runtime.setContainer(entry.id, null);
+    };
+  }, [entry.id]);
+
+  return (
+    <div className="moduleview">
+      <div
+        className="moduleview__container"
+        ref={ref}
+        style={{ display: phase === "ready" ? "block" : "none" }}
+      />
+      {phase === "loading" && (
+        <div className="content__placeholder">
+          <p className="content__placeholder-hint">加载模块 {entry.ui?.displayName ?? entry.id}…</p>
+        </div>
+      )}
+      {phase === "error" && (
+        <div className="content__placeholder">
+          <div className="content__placeholder-title">{entry.ui?.displayName ?? entry.id}</div>
+          <p className="content__placeholder-hint">模块加载失败：{err}</p>
+        </div>
+      )}
     </div>
   );
 }

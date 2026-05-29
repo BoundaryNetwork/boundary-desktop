@@ -166,6 +166,12 @@ export class HostServices implements CapabilityHost {
   getAuthState(): AuthState {
     return this.#authState.get();
   }
+  getConfig(): Record<string, unknown> {
+    return this.#config.get();
+  }
+  getNetwork(): NetworkState {
+    return this.#network.get();
+  }
   subscribeAuth(listener: (state: AuthState) => void): Disposable {
     return this.#authState.subscribe(listener);
   }
