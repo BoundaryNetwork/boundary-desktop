@@ -220,6 +220,24 @@ Loader 适配层把"代码在某 runtime 下变成 Module 实例"的脏活收口
 
 新增隔离级别（如进程级 webview）= 新增一个 Loader，上层与模块契约都不动。
 
+### 8.3 渲染壳结构与 UI 贡献模型
+
+渲染进程跑一个**基座壳应用**（`apps/shell`，React + Vite），它是 Host 在渲染侧的呈现层；模块界面挂进壳预留的区域，不自带窗口与导航。职责切分：
+
+**基座壳渲染（固定 chrome，不随模块增删）：**
+
+- 窗口外框、登录页：调 `auth.requestLogin`，登录流程由注入的 AuthDriver 完成，登录态走 `auth` 共享状态。
+- 左侧导航栏这个**容器**，及其底部基座级控件（账号 / 帮助 / 设置）——属壳自身，不是模块贡献。
+- 主区域挂载容器、主题（`theme` 共享状态）。
+
+**模块贡献（随热插拔增删）：**
+
+- 每个 UI 模块经 `registerMenuItem` 往导航栏注入一个入口（图标 + 名，取自 manifest 的 `ui` 块，激活前即可渲染——见 4.2）。
+- 经 `registerView` / `render(container)` 把界面挂到主区域；点导航入口 → 壳 `navigate` 切到该模块视图。
+- 参考目标态（ai-agent 实例化）：导航栏上半部入口（对话 / 团队 / 技能 / 任务 / 画布 / 浏览器）是模块，底部 3 个是基座控件。
+
+**框架边界：壳用 React，模块对基座的契约是框架无关的 `render(container: HTMLElement)`。** 模块拿到一个 DOM 容器自行挂载，可用任意轻量渲染方式，不被绑定到壳的 React。React 等框架级重依赖由基座统一提供、模块以 external 引用不重复打包（见 12.3），既省 bundle 又不把框架选择写进契约。
+
 ## 9. tool 子系统
 
 ### 9.1 tool 注册是横切能力
@@ -276,6 +294,8 @@ manifest 格式、生命周期钩子、ctx 三种范式的全部接口，构成�
 
 ```
 boundary-desktop/                  (pnpm workspace)
+├─ apps/
+│  └─ shell/                       基座壳：Electron 主进程 + React 渲染壳（apps/*，Phase 5）
 ├─ packages/
 │  ├─ contract/                    @boundary-desktop/contract  —— 契约（类型 + 运行期辅助）
 │  └─ host/                        @boundary-desktop/host      —— 基座（实现 contract）
@@ -284,11 +304,11 @@ boundary-desktop/                  (pnpm workspace)
    └─ .../                         各模块，均依赖 @boundary-desktop/contract
 ```
 
-`pnpm-workspace.yaml` 中 `packages:` 列出 `"packages/*"` 与 `"modules/*"`，二者平级。本地开发模块以 workspace 方式引用契约包，无需发包联动。契约改动可立即在基座与所有模块中暴露类型错误、一次改完。将来模块多、团队分散需拆多仓时，契约包已独立，直接发布即可。
+`pnpm-workspace.yaml` 中 `packages:` 列出 `"apps/*"`、`"packages/*"` 与 `"modules/*"`，三者平级。本地开发模块以 workspace 方式引用契约包，无需发包联动。契约改动可立即在基座与所有模块中暴露类型错误、一次改完。将来模块多、团队分散需拆多仓时，契约包已独立，直接发布即可。
 
 ### 12.3 共享依赖
 
-框架级重型依赖（渲染框架等）设为 external、由基座统一提供，模块不各自打包，避免多副本与版本不一致。模块自身的纯工具依赖走正常 npm 声明，或置于 monorepo 共享 package。
+框架级重型依赖（渲染框架等）设为 external、由基座统一提供，模块不各自打包，避免多副本与版本不一致。渲染框架定为 **React**（基座壳用 React + Vite，模块经框架无关的 `render(container)` 挂载，见 8.3）。模块自身的纯工具依赖走正常 npm 声明，或置于 monorepo 共享 package。
 
 ## 13. 安全
 
@@ -341,7 +361,7 @@ export default defineModule<MainContext>({
 2. **基座核心**：`ModuleRegistry` 生命周期状态机 + 全局 tool 注册表（命名空间前缀）+ in-flight drain 账本。验证：本地目录来源的 main 模块走 install→activate→replace→deactivate 全程，tool 注册/回收/重名检测正确。
 3. **ctx 注入 + main 加载**：BaseContext 实现（auth/storage/api.request/notify/registerTool）+ main Loader（Node import 本地文件）。验证：示例 main 模块激活后 tool 可被调用。
 4. **对外 WS 门面**：list / invoke / version 三件套 + 变更主动推送。验证：外部 WS 客户端 list 到 tool、invoke 成功、模块热替换后收到变更通知。
-5. **renderer 加载 + UI 贡献**：`app://` 协议 + 落本地 import + RendererContext（container/theme/registerView）+ 跨进程 tool 路由。验证：renderer 模块挂载视图、其 tool 经 IPC 路由可调。
+5. **renderer 加载 + UI 贡献（壳闭环）**：`apps/shell`（Electron 主进程 + BrowserWindow + `app://` 协议 + preload contextBridge + 主↔渲染 IPC tool 路由）+ React 基座壳（登录页 / 导航栏含 3 基座控件 / 主区域 / 主题，见 8.3）+ `RendererLoader`（`app://` 落本地 import，对标 MainLoader）+ RendererContext（container/theme/navigate/registerView/registerMenuItem）。验证：登录 → 壳起 → catalog 拉到一个示例 renderer 模块（"对话"入口 + 渲染视图）→ 导航栏出现入口 → 点开挂载，其 tool 经 IPC 路由可调。**先打通单模块闭环，不一次实现 6 个模块。**
 6. **远程来源 + catalog 对账**：CDN 来源（单一签名 catalog + 各产物 integrity）+ catalog 轮询/对账（install/replace/uninstall）+ dev 本地来源 HMR。验证：拉 catalog 验签、按 diff 增删换模块、灰度热替换不断连接；本地保存文件秒级热重载。
 
 ## 17. 验证标准（汇总）
