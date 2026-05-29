@@ -1,3 +1,13 @@
 packages:
+  - "apps/*"
   - "packages/*"
   - "modules/*"
+
+# 放行需要运行安装脚本的依赖(electron 下载二进制、esbuild 装平台包)
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+
+allowBuilds:
+  electron: true
+  esbuild: true

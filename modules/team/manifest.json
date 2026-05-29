@@ -1,0 +1,9 @@
+{
+  "id": "team",
+  "version": "0.1.0",
+  "runtime": "renderer",
+  "hostApiVersion": "^0.1.0",
+  "entry": "index.js",
+  "integrity": "",
+  "ui": { "displayName": "团队", "icon": "team", "description": "数字员工团队" }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@boundary-desktop/shell",
+  "version": "0.1.0",
+  "description": "基座壳:Electron 主进程 + React 渲染壳",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+  },
+  "dependencies": {
+    "@boundary-desktop/contract": "workspace:*",
+    "@boundary-desktop/host": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-vite": "^2.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.11"
+  }
+}

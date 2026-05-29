@@ -2,6 +2,7 @@ import type {
   ApiRequest,
   AuthState,
   BaseContext,
+  Disposable,
   NetworkState,
   NotifyOptions,
   StorageScope,
@@ -158,6 +159,27 @@ export class HostServices implements CapabilityHost {
     this.#network.set(network);
   }
 
+  // host 级 auth：壳（非模块）经此发起登录/登出、读状态；模块侧 ctx.auth 委托到这同一套实现。
+  getToken(): string | null {
+    return this.#token;
+  }
+  getAuthState(): AuthState {
+    return this.#authState.get();
+  }
+  subscribeAuth(listener: (state: AuthState) => void): Disposable {
+    return this.#authState.subscribe(listener);
+  }
+  async requestLogin(): Promise<void> {
+    const { token, user } = await this.#authDriver.login();
+    this.#token = token;
+    this.#authState.set({ authenticated: true, user });
+  }
+  async requestLogout(): Promise<void> {
+    await this.#authDriver.logout();
+    this.#token = null;
+    this.#authState.set({ authenticated: false, user: null });
+  }
+
   forModule(self: BaseContext["self"], track: TrackDisposable): ModuleCapabilities {
     const withSelf = (meta: object | undefined): object => ({
       ...meta,
@@ -167,16 +189,8 @@ export class HostServices implements CapabilityHost {
     return {
       auth: Object.assign(this.#authState.readonly(track), {
         getToken: () => this.#token,
-        requestLogin: async () => {
-          const { token, user } = await this.#authDriver.login();
-          this.#token = token;
-          this.#authState.set({ authenticated: true, user });
-        },
-        requestLogout: async () => {
-          await this.#authDriver.logout();
-          this.#token = null;
-          this.#authState.set({ authenticated: false, user: null });
-        },
+        requestLogin: () => this.requestLogin(),
+        requestLogout: () => this.requestLogout(),
       }),
       config: this.#config.readonly(track),
       network: this.#network.readonly(track),

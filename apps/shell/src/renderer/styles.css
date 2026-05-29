@@ -1,0 +1,234 @@
+:root {
+  --brand: #2f6bff;
+  --brand-soft: #eaf0ff;
+  --ink: #1f2329;
+  --ink-soft: #6b7280;
+  --line: #e7e9ee;
+  --bg: #f7f8fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.boot {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--ink-soft);
+}
+
+/* ---------- 登录页 ---------- */
+.login {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+
+.login__brand {
+  padding: 64px 56px;
+  background: linear-gradient(160deg, #eef3ff, #dbe6ff);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login__brand-title {
+  font-size: 34px;
+  margin: 0;
+  color: var(--brand);
+}
+.login__brand-sub {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+.login__brand-tagline {
+  color: var(--ink-soft);
+  margin: 0 0 24px;
+}
+.login__features {
+  list-style: none;
+  padding: 0;
+  margin: auto 0 0;
+  display: flex;
+  gap: 20px;
+  color: var(--brand);
+  font-size: 13px;
+}
+
+.login__panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0 72px;
+}
+.login__logo {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--brand);
+}
+.login__panel-sub {
+  color: var(--ink-soft);
+  margin: 6px 0 28px;
+}
+.login__form {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.login__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.login__input {
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+}
+.login__input:focus {
+  border-color: var(--brand);
+}
+.login__remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.login__error {
+  color: #e5484d;
+  font-size: 13px;
+  margin: 0;
+}
+.login__submit {
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+.login__submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---------- 框架壳 ---------- */
+.shell {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  height: 100%;
+}
+
+.rail {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 0;
+}
+.rail__top,
+.rail__bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.rail__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--brand);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.rail__item {
+  width: 60px;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+.rail__item--active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.rail__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+.rail__item--active .rail__icon {
+  background: #fff;
+}
+.rail__base {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 16px;
+}
+.rail__base:hover {
+  background: var(--bg);
+}
+
+.content {
+  display: grid;
+  place-items: center;
+}
+.content__placeholder {
+  text-align: center;
+  color: var(--ink-soft);
+}
+.content__placeholder-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+.content__placeholder code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 5px;
+}

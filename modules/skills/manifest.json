@@ -1,0 +1,9 @@
+{
+  "id": "skills",
+  "version": "0.1.0",
+  "runtime": "renderer",
+  "hostApiVersion": "^0.1.0",
+  "entry": "index.js",
+  "integrity": "",
+  "ui": { "displayName": "技能", "icon": "skills", "description": "技能编排" }
+}

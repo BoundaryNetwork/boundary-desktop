@@ -1,0 +1,9 @@
+{
+  "id": "browser",
+  "version": "0.1.0",
+  "runtime": "renderer",
+  "hostApiVersion": "^0.1.0",
+  "entry": "index.js",
+  "integrity": "",
+  "ui": { "displayName": "浏览器", "icon": "browser", "description": "内置浏览器" }
+}
