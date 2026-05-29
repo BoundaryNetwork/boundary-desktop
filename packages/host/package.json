@@ -1,0 +1,31 @@
+{
+  "name": "@boundary-desktop/host",
+  "version": "0.1.0",
+  "description": "基座(Host):实现 contract,持有全部有状态资源",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@boundary-desktop/contract": "workspace:*",
+    "semver": "^7.7.1",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/semver": "^7.7.1",
+    "@types/ws": "^8.18.1",
+    "vitest": "^4.1.7"
+  }
+}

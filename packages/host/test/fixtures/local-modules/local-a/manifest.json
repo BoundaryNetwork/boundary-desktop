@@ -1,0 +1,8 @@
+{
+  "id": "local-a",
+  "version": "1.0.0",
+  "runtime": "main",
+  "hostApiVersion": "*",
+  "entry": "index.mjs",
+  "integrity": ""
+}
