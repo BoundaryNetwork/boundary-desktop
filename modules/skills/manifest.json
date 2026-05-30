@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "runtime": "renderer",
   "hostApiVersion": "^0.1.0",
-  "entry": "index.js",
+  "entry": "dist/index.mjs",
   "integrity": "",
   "ui": { "displayName": "技能", "icon": "skills", "description": "技能编排", "order": 3 }
 }
