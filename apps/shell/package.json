@@ -6,8 +6,10 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
+    "predev": "node scripts/build-modules.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:mods": "node scripts/build-modules.mjs",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
@@ -22,6 +24,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
+    "esbuild": "^0.21.5",
     "electron-vite": "^2.3.0",
     "typescript": "^6.0.3",
     "vite": "^5.4.11"

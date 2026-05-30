@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>达比 AI</title>
+    <!-- 模块产物的 bare import 经此映射到 app://vendor 的共享依赖(一份 React,多模块共享) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "app://vendor/vendor.mjs",
+          "react-dom/client": "app://vendor/vendor.mjs"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

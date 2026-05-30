@@ -12,7 +12,7 @@ import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
 import { ShellAuthDriver } from "./auth.js";
-import { registerAppProtocol, registerAppScheme } from "./app-protocol.js";
+import { registerAppProtocol, registerAppScheme, setVendorDir } from "./app-protocol.js";
 import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
 
@@ -24,6 +24,9 @@ const bridge = new RendererBridge();
 
 const modulesRoot = process.env.BOUNDARY_MODULES_DIR ?? join(process.cwd(), "..", "..", "modules");
 const source: ModuleSource = new LocalDirSource([modulesRoot]);
+
+// 共享依赖(react/react-dom)产物目录,经 app://vendor 提供给渲染页 import map
+setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(process.cwd(), "vendor"));
 
 const registry = new Registry({
   source,

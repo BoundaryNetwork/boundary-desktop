@@ -3,6 +3,12 @@ import { pathToFileURL } from "node:url";
 import { net, protocol } from "electron";
 import { moduleArtifacts } from "./module-artifacts.js";
 
+// 共享依赖(react / react-dom)产物目录,经 app://vendor/<file> 提供给渲染页 import map。
+let vendorDir: string | null = null;
+export function setVendorDir(dir: string): void {
+  vendorDir = dir;
+}
+
 /** 在 app ready 前把 app:// 注册成特权 scheme(standard + secure + 支持 fetch/stream),
  *  使渲染层可 import('app://...') 且不撞 https 远程的 CSP 限制。 */
 export function registerAppScheme(): void {
@@ -18,11 +24,25 @@ export function registerAppScheme(): void {
 export function registerAppProtocol(): void {
   protocol.handle("app", async (request) => {
     const url = new URL(request.url);
-    if (url.hostname !== "modules") return new Response("not found", { status: 404 });
-    const [id, version, ...rest] = decodeURIComponent(url.pathname).split("/").filter(Boolean);
-    if (!id || !version || rest.length === 0) return new Response("bad path", { status: 400 });
-    const dir = moduleArtifacts.dir(id, version);
-    if (!dir) return new Response("unknown module artifact", { status: 404 });
+    const segs = decodeURIComponent(url.pathname).split("/").filter(Boolean);
+
+    let dir: string | undefined;
+    let rest: string[];
+    if (url.hostname === "vendor") {
+      // app://vendor/<file> → 共享依赖产物目录
+      dir = vendorDir ?? undefined;
+      rest = segs;
+    } else if (url.hostname === "modules") {
+      // app://modules/<id>/<version>/<file...> → 该模块产物目录
+      const [id, version, ...tail] = segs;
+      if (!id || !version) return new Response("bad path", { status: 400 });
+      dir = moduleArtifacts.dir(id, version);
+      rest = tail;
+    } else {
+      return new Response("not found", { status: 404 });
+    }
+    if (!dir) return new Response("unknown artifact root", { status: 404 });
+    if (rest.length === 0) return new Response("bad path", { status: 400 });
     const filePath = normalize(join(dir, ...rest));
     if (!filePath.startsWith(dir)) return new Response("forbidden", { status: 403 }); // 防目录穿越
 
