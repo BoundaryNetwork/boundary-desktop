@@ -11,14 +11,22 @@
 
 ## Layout
 
-pnpm workspace，`packages/*` 与 `modules/*` 平级。
+pnpm workspace：`apps/*`、`packages/*`、`modules/*` 三者平级。
 
+- `apps/shell`
+  - `@boundary-desktop/shell` —— Electron 壳：主进程 + React 渲染壳 + `vendor/`（共享 React 运行时产物）。框架的一个宿主，消费下列契约
 - `packages/contract`
   - `@boundary-desktop/contract` —— manifest / 生命周期 / 三层 ctx / tool 契约，外加 `defineModule` 与 `HOST_API_VERSION`。基座与所有模块共同依赖
 - `packages/host`
   - `@boundary-desktop/host` —— 基座，实现 contract，持有全部有状态资源（当前为占位）
-- `modules/`
-  - 业务模块，均依赖 `@boundary-desktop/contract`（当前为空）
+- `packages/ui`
+  - `@boundary-desktop/ui` —— 样式契约（纯 CSS）：设计 token + `bd-*` 设计系统类。基座发布、模块消费，与 contract 平级
+- `modules/<id>`
+  - 业务模块（chat/team/skills/tasks/canvas/browser，当前示例 stub）。各自标准包，统一 `src/index.ts(x)` → 构建出 `dist/index.mjs`，依赖 `@boundary-desktop/contract`
+- `scripts/`
+  - workspace 级模块工具链：`build-modules.mjs`（vendor + 各模块构建）、`pack-modules.mjs`（发布 catalog）
+- `module-envs.json`
+  - env → CDN base 单一事实源（客户端拉 catalog / 发布写 entry 共用）
 
 ## 命令
 
@@ -26,6 +34,12 @@ pnpm workspace，`packages/*` 与 `modules/*` 平级。
 pnpm install        # 安装 + 建立 workspace 链接
 pnpm build          # 构建全部包（pnpm -r build）
 pnpm typecheck      # 全包类型检查
+
+# 模块工具链（workspace 级，根脚本）
+pnpm build:mods                    # 自动发现并构建各模块产物 + vendor
+pnpm pack:mods <staging|prod>      # 发布：算 integrity + 生成 catalog.json → out/publish/<env>
+
+pnpm clean                         # 清构建产物（dist/out/out-tsc/vendor/*.tsbuildinfo，不动 node_modules）
 ```
 
 ## 核心约束

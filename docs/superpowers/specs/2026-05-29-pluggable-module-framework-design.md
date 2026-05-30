@@ -238,6 +238,27 @@ Loader 适配层把"代码在某 runtime 下变成 Module 实例"的脏活收口
 
 **框架边界：壳用 React，模块对基座的契约是框架无关的 `render(container: HTMLElement)`。** 模块拿到一个 DOM 容器自行挂载，可用任意轻量渲染方式，不被绑定到壳的 React。React 等框架级重依赖由基座统一提供、模块以 external 引用不重复打包（见 12.3），既省 bundle 又不把框架选择写进契约。
 
+### 8.4 样式契约（基座发布，模块消费）
+
+样式与 React 同属基座向模块发布的共享面：基座提供统一样式架构，模块消费而非各自重造。**样式契约独立成包 `@boundary-desktop/ui`（`packages/ui`），与 `@boundary-desktop/contract` 平级——契约不归属任何具体宿主应用（`apps/shell` 只是 import 它的消费者之一，模块是另一类消费者）。** 包内为纯 CSS，三层、全部框架无关（纯 DOM 模块同样适用）：
+
+1. **token**（`@boundary-desktop/ui` → `tokens.css`）——OKLCH 设计变量（颜色 / 间距 / 圆角 / 字号，含 light/dark），定义在 `:root`。设计词汇地基，强制使用，不许硬编码颜色/尺寸。
+2. **设计系统类 `bd-*`**（`@boundary-desktop/ui` → `design-system.css`）——建在 token 上的组件/工具类（按钮 / 输入 / 卡片 / 行 / 字段 / 分段 / 徽标 / 空态…）。模块按 class 名消费即得一致外观与交互（hover/focus 等由 CSS 承担）。
+3. **宿主 chrome（非契约，留在宿主自己）**——`apps/shell` 的 `styles.css`:全局 reset、滚动条、模块挂载区、壳画的加载/空态。不发布给模块。
+
+基座壳 import `@boundary-desktop/ui/styles.css`（聚合 token + `bd-*`）一次全局加载,自动覆盖渲染进程 DOM(含模块容器);模块按 class 名消费,运行时无需声明依赖(全局已加载)。
+
+**为何选 CSS 类而非 React 组件库做地基**：模块契约是框架无关的 `render(container)`、可纯 DOM，CSS 类任何模块都能用；typed 的 React 组件 kit 可作 React 模块的可选便利层后加进同一包，不作地基。
+
+**归属规范（泄漏 vs 契约，区别在归属不在位置）：**
+
+- `@boundary-desktop/ui` **独占** token 与 `bd-*`，作为发布契约，版本随 `HOST_API_VERSION`。
+- 模块**可以**：用 token、用 `bd-*`、为专属布局加**模块作用域**样式（scoped 根类或内联 + token）。
+- 模块**不得**：定义全局类、覆写 `bd-*`、把自己的私有组件类塞进契约包或宿主样式表。
+- 反例对照：模块把 `.chat__msg` 定义进壳 = 污染（该类归模块）；`@boundary-desktop/ui` 发布 `.bd-card` 供所有模块用 = 契约。把契约 CSS 埋在 `apps/shell` 里同样是错位——契约该独立成包。
+
+这样同时满足统一（同一套 `bd-*`/token）、独立（模块只依赖发布契约、互不依赖）、灵活（自由组合 + 专属内联）、不丢规范（`bd-*` 即规范，版本化兜底）。
+
 ## 9. tool 子系统
 
 ### 9.1 tool 注册是横切能力
@@ -295,13 +316,16 @@ manifest 格式、生命周期钩子、ctx 三种范式的全部接口，构成�
 ```
 boundary-desktop/                  (pnpm workspace)
 ├─ apps/
-│  └─ shell/                       基座壳：Electron 主进程 + React 渲染壳（apps/*，Phase 5）
+│  └─ shell/                       基座壳：Electron 主进程 + React 渲染壳 + vendor/（apps/*，Phase 5）
 ├─ packages/
 │  ├─ contract/                    @boundary-desktop/contract  —— 契约（类型 + 运行期辅助）
-│  └─ host/                        @boundary-desktop/host      —— 基座（实现 contract）
-└─ modules/                        业务模块（与 packages 平级）
-   ├─ browser/                     @boundary-desktop/module-browser
-   └─ .../                         各模块，均依赖 @boundary-desktop/contract
+│  ├─ host/                        @boundary-desktop/host      —— 基座（实现 contract）
+│  └─ ui/                          @boundary-desktop/ui        —— 样式契约（token + bd-*，纯 CSS）
+├─ modules/                        业务模块（与 packages 平级）
+│  ├─ browser/                     @boundary-desktop/module-browser（src/index.ts → dist/index.mjs）
+│  └─ .../                         各模块标准包，均依赖 @boundary-desktop/contract
+├─ scripts/                        workspace 级模块工具链（build-modules / pack-modules）
+└─ module-envs.json                env → CDN base 单一事实源（客户端拉 / 发布写 共用）
 ```
 
 `pnpm-workspace.yaml` 中 `packages:` 列出 `"apps/*"`、`"packages/*"` 与 `"modules/*"`，三者平级。本地开发模块以 workspace 方式引用契约包，无需发包联动。契约改动可立即在基座与所有模块中暴露类型错误、一次改完。将来模块多、团队分散需拆多仓时，契约包已独立，直接发布即可。

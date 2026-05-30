@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app } from "electron";
 import { LocalDirSource, RemoteSource, type ModuleSource } from "@boundary-desktop/host";
+import MODULE_ENV_BASES from "../../../../module-envs.json" with { type: "json" }; // env → CDN base（仓库根），发布(pack:mods)与客户端共用的单一事实源
 
 export type EnvName = "local" | "staging" | "prod";
 
@@ -19,22 +20,18 @@ export function activeEnv(): EnvName {
   return name;
 }
 
-// 各远程环境的 catalog 地址(非密,可入库占位)。active env 的可经 BOUNDARY_CATALOG_URL 覆盖。
-const CATALOG_URL: Record<"staging" | "prod", string> = {
-  staging: "https://cdn-staging.example.com/modules/catalog.json",
-  prod: "https://cdn.example.com/modules/catalog.json",
-};
-
 /** 按 active env 构造模块来源:
  *  - local:扫本地 modules/(无 CDN,跳过校验)。
- *  - staging/prod:RemoteSource 拉对应 catalog,产物缓存按 env 命名空间隔离。 */
+ *  - staging/prod:RemoteSource 拉对应 catalog,产物缓存按 env 命名空间隔离。
+ *  catalog 地址 = module-envs.json 里该 env 的 base + /catalog.json(发布侧写 entry 用同一 base),
+ *  active env 的可经 BOUNDARY_CATALOG_URL 覆盖。 */
 export function createModuleSource(): { env: EnvName; source: ModuleSource } {
   const env = activeEnv();
   if (env === "local") {
     const root = process.env.BOUNDARY_MODULES_DIR ?? join(process.cwd(), "..", "..", "modules");
     return { env, source: new LocalDirSource([root]) };
   }
-  const catalogUrl = process.env.BOUNDARY_CATALOG_URL ?? CATALOG_URL[env];
+  const catalogUrl = process.env.BOUNDARY_CATALOG_URL ?? `${MODULE_ENV_BASES[env]}/catalog.json`;
   const cacheDir = join(app.getPath("userData"), "modules-cache", env); // 按 env 隔离
   return { env, source: new RemoteSource({ catalogUrl, cacheDir }) };
 }

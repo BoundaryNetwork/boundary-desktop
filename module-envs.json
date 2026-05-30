@@ -1,0 +1,4 @@
+{
+  "staging": "https://cdn-staging.example.com/modules",
+  "prod": "https://cdn.example.com/modules"
+}

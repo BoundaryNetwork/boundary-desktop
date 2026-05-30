@@ -4,9 +4,13 @@
   "packageManager": "pnpm@11.4.0",
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "build:mods": "node scripts/build-modules.mjs",
+    "pack:mods": "node scripts/pack-modules.mjs",
+    "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.21.5",
     "typescript": "^6.0.3"
   }
 }
