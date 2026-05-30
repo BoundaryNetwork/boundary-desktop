@@ -5,5 +5,5 @@
   "hostApiVersion": "^0.1.0",
   "entry": "index.js",
   "integrity": "",
-  "ui": { "displayName": "任务", "icon": "tasks", "description": "任务管理" }
+  "ui": { "displayName": "任务", "icon": "tasks", "description": "任务管理", "order": 4 }
 }

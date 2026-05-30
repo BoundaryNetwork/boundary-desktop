@@ -16,8 +16,12 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     runtime.setNavigate(setActiveId);
     void window.hostApi.env().then(setEnv);
     void window.hostApi.modules.list().then((list) => {
-      setModules(list);
-      setActiveId((cur) => cur ?? list[0]?.id ?? null);
+      // 按模块自声明的 ui.order 升序;未指定的排在后面(稳定排序保留发现顺序)
+      const ordered = [...list].sort(
+        (a, b) => (a.ui?.order ?? Infinity) - (b.ui?.order ?? Infinity),
+      );
+      setModules(ordered);
+      setActiveId((cur) => cur ?? ordered[0]?.id ?? null);
     });
   }, []);
 

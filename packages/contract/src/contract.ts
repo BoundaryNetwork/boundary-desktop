@@ -61,6 +61,8 @@ export interface ModuleUiMeta {
    *  逃生口:内联 SVG 或 data-URI —— 远程内容,渲染前必须 sanitize(防 SVG XSS)。 */
   icon: string;
   description?: string;
+  /** 导航入口排序权重,升序。未指定的排在已指定的之后(按发现顺序)。 */
+  order?: number;
 }
 
 // ===========================================================================

@@ -5,5 +5,5 @@
   "hostApiVersion": "^0.1.0",
   "entry": "dist/index.mjs",
   "integrity": "",
-  "ui": { "displayName": "对话", "icon": "chat", "description": "与数字员工对话" }
+  "ui": { "displayName": "对话", "icon": "chat", "description": "与数字员工对话", "order": 1 }
 }
