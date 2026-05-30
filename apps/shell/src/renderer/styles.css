@@ -212,6 +212,22 @@ body {
 .rail__base:hover {
   background: var(--bg);
 }
+.rail__env {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.rail__env--local {
+  background: #e7f0ff;
+  color: var(--brand);
+}
+.rail__env--staging {
+  background: #fff3e0;
+  color: #d97706;
+}
 
 .content {
   display: grid;

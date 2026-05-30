@@ -10,6 +10,7 @@ import type {
 } from "../shared/types.js";
 
 const hostApi: HostApi = {
+  env: () => ipcRenderer.invoke(IPC.appEnv) as Promise<string>,
   auth: {
     getState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
     requestLogin: () => ipcRenderer.invoke(IPC.authRequestLogin) as Promise<void>,

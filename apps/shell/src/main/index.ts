@@ -1,18 +1,12 @@
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain } from "electron";
-import {
-  HostServices,
-  LocalDirSource,
-  MainLoader,
-  Registry,
-  startWsFacade,
-  type ModuleSource,
-} from "@boundary-desktop/host";
+import { HostServices, MainLoader, Registry, startWsFacade } from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
 import { ShellAuthDriver } from "./auth.js";
 import { registerAppProtocol, registerAppScheme, setVendorDir } from "./app-protocol.js";
+import { createModuleSource } from "./env.js";
 import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
 
@@ -22,8 +16,9 @@ const authDriver = new ShellAuthDriver();
 const host = new HostServices({ auth: authDriver });
 const bridge = new RendererBridge();
 
-const modulesRoot = process.env.BOUNDARY_MODULES_DIR ?? join(process.cwd(), "..", "..", "modules");
-const source: ModuleSource = new LocalDirSource([modulesRoot]);
+// 按 active env(local/staging/prod)构造模块来源:local 扫本地、远程拉对应 catalog
+const { env: activeEnv, source } = createModuleSource();
+console.log(`[shell] 环境:${activeEnv}`);
 
 // 共享依赖(react/react-dom)产物目录,经 app://vendor 提供给渲染页 import map
 setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(process.cwd(), "vendor"));
@@ -76,6 +71,8 @@ async function ensureInstalled(id: string): Promise<void> {
 }
 
 function registerIpc(): void {
+  ipcMain.handle(IPC.appEnv, () => activeEnv);
+
   // 壳 → main:登录
   ipcMain.handle(IPC.authGetState, () => host.getAuthState());
   ipcMain.handle(IPC.authRequestLogin, () => host.requestLogin());

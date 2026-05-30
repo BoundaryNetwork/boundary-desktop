@@ -9,10 +9,12 @@ import { runtime } from "./runtime";
 export function Shell({ user }: { user: UserInfo }): JSX.Element {
   const [modules, setModules] = useState<ModuleEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [env, setEnv] = useState<string>("");
 
   useEffect(() => {
     void runtime.start();
     runtime.setNavigate(setActiveId);
+    void window.hostApi.env().then(setEnv);
     void window.hostApi.modules.list().then((list) => {
       setModules(list);
       setActiveId((cur) => cur ?? list[0]?.id ?? null);
@@ -42,6 +44,11 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
         </div>
 
         <div className="rail__bottom">
+          {env && env !== "prod" && (
+            <span className={`rail__env rail__env--${env}`} title={`当前环境：${env}`}>
+              {env}
+            </span>
+          )}
           <button className="rail__base" title="帮助">?</button>
           <button className="rail__base" title="设置">⚙</button>
           <button

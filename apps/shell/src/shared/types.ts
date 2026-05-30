@@ -32,6 +32,8 @@ export interface ActivateRequest {
 
 /** 壳通过 preload contextBridge 拿到的受控 host API。main 实现、壳消费。 */
 export interface HostApi {
+  /** 当前运行环境(local/staging/prod),壳据此显示角标、区分多环境。 */
+  env(): Promise<string>;
   auth: {
     getState(): Promise<AuthState>;
     requestLogin(): Promise<void>;

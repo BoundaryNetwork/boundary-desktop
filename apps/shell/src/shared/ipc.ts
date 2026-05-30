@@ -1,6 +1,7 @@
 /** IPC 通道名,main 与 preload 共用(renderer 经 window.* 结构化 API,不直接用这些)。 */
 export const IPC = {
   // 壳 → main(ipcRenderer.invoke)
+  appEnv: "app:env",
   authGetState: "auth:getState",
   authRequestLogin: "auth:requestLogin",
   authSubmitLogin: "auth:submitLogin",
