@@ -1,0 +1,223 @@
+/*
+  tokens-blue.css — 冷蓝色彩风格。
+
+  与同目录的 tokens-orange.css(暖橙风格)是并列的两套 OKLCH design token,
+  各自含 light + dark mode。切哪一套由 globals.css 顶部的 @import 决定。
+
+  与 tokens-orange.css 的差别(只在"颜色族",其他 token 数值逐字节一致):
+  - 颜色按 design-reference/dashboard/index.html 的产品色精调,bg/line/fg/
+    traffic-unfocused 全部染上 hue 263(C 0.002..0.057,整体冷蓝灰调)。
+  - accent / status / brand-2 取 dashboard 的 hex (#2f7dff / #23ad6b /
+    #ff9f2d / #ff725f / #7458ff) 换算成 oklch。
+  - --info 在两套主题里都是蓝色(信息色不分主题)。
+  - 非颜色 token(阴影 / 遮罩 / 圆角 / 间距 / 字号 / 字重 / 字间距 / 行高 /
+    字体)与 tokens-orange.css 完全相同;两边注释保持同步,便于后续合并维护。
+
+  切换:
+  - 主程序:把 renderer/src/styles/globals.css 顶部 @import 改到目标 token 文件,pnpm dev / build。
+  - playground:见 design-reference/design-system/theme-playground.html。
+*/
+
+:root {
+  /* dashboard blue #2f7dff 对应 hue ~263 (oklch);blue.html 给的 250 偏紫,
+     263 更贴 dashboard 的"中带绿冷蓝"。 */
+  --accent-h: 263;
+
+  /* light (default) — dashboard 蓝主色族 */
+  --accent: oklch(0.6 0.21 var(--accent-h)); /* ≈ #2f7dff */
+  --accent-soft: oklch(0.6 0.21 var(--accent-h) / 0.12);
+  --accent-ring: oklch(0.6 0.21 var(--accent-h) / 0.28);
+  --accent-fg: oklch(0.99 0.01 var(--accent-h));
+  /* selection wash —— 半透明主色覆盖在文字上,既保留主色调又不压死前景。
+     light 模式 accent 偏深,用更高 L 同色相做 wash;dark 见 [data-theme=dark]。 */
+  --selection-bg: oklch(0.86 0.1 var(--accent-h) / 0.32);
+
+  /* 背景阶梯,全部染上 dashboard 的冷蓝调 */
+  --bg-0: oklch(0.977 0.012 263); /* ≈ #f6f9ff app-bg */
+  --bg-1: oklch(1 0 0);
+  --bg-2: oklch(0.988 0.01 263);
+  --bg-3: oklch(0.96 0.016 263);
+  --bg-4: oklch(0.93 0.02 263);
+  /* 中栏专用:介于 sidebar (bg-0) 与主内容区 (bg-1) 之间,做"层次过渡"。
+     浅色 0.985 / 深色 0.175,与左右两栏拉出可见但不刺眼的色阶。 */
+  --bg-mid: oklch(0.985 0.013 263);
+
+  /* 语义 token:中栏 / 主区背景。深色模式下两者对调(主区比中栏更深一档),
+     避免大面积白茫茫的"亮主区"在夜里刺眼。深色定义见 [data-theme=dark]。
+     中栏色相切到 accent-h,做"过渡层"——比 LeftRail 淡、比主区浓,跟冷蓝调连成片。 */
+  --panel-mid-bg: oklch(0.985 0.018 var(--accent-h));
+  --panel-main-bg: var(--bg-1);
+
+  --line: oklch(0.937 0.016 263 / 0.9); /* ≈ #e7eefb */
+  --line-soft: oklch(0.95 0.013 263 / 0.7);
+
+  --fg-0: oklch(0.21 0.07 268); /* ≈ #0c1634 text-1 */
+  --fg-1: oklch(0.32 0.05 265);
+  --fg-2: oklch(0.42 0.045 265); /* ≈ #4d5d7e text-2 */
+  --fg-3: oklch(0.58 0.04 265); /* ≈ #7888a8 text-3 */
+
+  --ok: oklch(0.64 0.155 154); /* ≈ #23ad6b green */
+  --warn: oklch(0.78 0.165 60); /* ≈ #ff9f2d orange */
+  --err: oklch(0.7 0.19 26); /* ≈ #ff725f red */
+  --info: oklch(0.55 0.14 230);
+  /* 第二品牌色(紫族)。KPI 卡片"待处理"图标 / 跟 accent 形成对比的次要强调用。 */
+  --brand-2: oklch(0.55 0.245 277); /* ≈ #7458ff purple */
+
+  /* —— 以下数值跟 tokens-orange.css 完全一致 —————————————————————————— */
+
+  /* 阴影阶梯,主力 4 档(1=hairline / 2=card+focus / 3=floating / 4=modal),
+     2 个特殊场景(drawer 水平方向 / switch 滑块)。深色模式下 alpha 加重,
+     避免暗背景上"看不见"。装饰性 inset 描边(eg. TrafficLights)不进 token。 */
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.04);
+  --shadow-2: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -4px oklch(0 0 0 / 0.12);
+  --shadow-3: 0 8px 24px -8px oklch(0 0 0 / 0.35);
+  --shadow-4: 0 20px 60px -10px oklch(0 0 0 / 0.5);
+  --shadow-drawer: -8px 0 24px oklch(0 0 0 / 0.14);
+  --shadow-knob: 0 1px 2px oklch(0 0 0 / 0.16);
+
+  /* 全屏遮罩 / lightbox 背景。1=弱(侧抽屉) / 2=中(普通 modal) / 3=强(图片预览)。
+     深色模式下整体加重,因为暗页面本身就深,弱 alpha 看不出"被压暗"。 */
+  --overlay-1: oklch(0 0 0 / 0.32);
+  --overlay-2: oklch(0 0 0 / 0.45);
+  --overlay-3: oklch(0 0 0 / 0.72);
+
+  /* macOS 自绘红绿灯失焦灰。模拟系统标准:light 下接近 titlebar 的浅灰,
+     dark 下中灰跟暗 titlebar 协调,不喧宾夺主。hue 跟随当前主题(263 冷蓝)。 */
+  --traffic-unfocused-bg: oklch(0.82 0.002 263);
+  --traffic-unfocused-border: oklch(0.74 0.002 263);
+
+  /* 圆角阶梯,从 1(微) 到 7(大);特殊 pill(胶囊) / circle(圆形)
+     用语义命名。chat user 气泡的不规则圆角('12px 12px 0 12px') 是
+     单一特殊场景,不进 token,直接硬编码。 */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 8px;
+  --r-4: 10px;
+  --r-5: 12px;
+  --r-6: 14px;
+  --r-7: 16px;
+  --r-pill: 999px;
+  --r-circle: 50%;
+
+  --pad: 28px;
+  --gap: 18px;
+  --row-h: 48px;
+
+  /* 间距阶梯,从 0(无) 到 15(超大)。覆盖 padding/margin/gap 的全部
+     现状值,改值不改名。特殊场景(负值微调)直接硬编码。 */
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 22px;
+  --space-11: 24px;
+  --space-12: 28px;
+  --space-13: 32px;
+  --space-14: 36px;
+  --space-15: 48px;
+
+  /* 字重 3 档,值即名。400 = 常规正文 / 600 = 中等强调(chip / tab) / 800 = 标题 / KPI 大数字 / 主按钮。
+     用数字命名跟 px 阶梯保持同套思路:语义争论(medium 还是 semibold?)直接绕过。 */
+  --fw-400: 400;
+  --fw-600: 600;
+  --fw-800: 800;
+
+  /* 字间距 2 档。--ls-1 紧(负值,用于超大字号 display)→ --ls-2 默认(正值,用于
+     标题 / KPI 数字)。单调递增对应"紧 → 松"的视觉密度。 */
+  --ls-1: -0.05em;
+  --ls-2: 0.02em;
+
+  /* 字号阶梯。值与现状硬编码 px 一一对应,先收口入口,后续整体调参只改这里。
+     命名用纯数字而非 xs/sm/md/lg,避免"该用 sm 还是 base"的语义争论;
+     从 0(微) 到 11(大) 单调递增,改值不改名。 */
+  --text-0: 11px;
+  --text-1: 12px;
+  --text-2: 13px;
+  --text-3: 14px;
+  --text-4: 15px;
+  --text-5: 17px;
+  --text-6: 20px;
+  --text-7: 20px;
+  --text-8: 24px;
+  --text-9: 32px;
+  --text-10: 40px;
+  --text-11: 56px;
+
+  /* 行高阶梯。从 1(单行紧贴) 到 10(极松) 单调递增,改值不改名。
+     特殊场景(行高 0 = 行内装饰,'18px' = 工具卡 label 固定行框)直接
+     硬编码,不进 token。 */
+  --lh-1: 1;
+  --lh-2: 1.1;
+  --lh-3: 1.2;
+  --lh-4: 1.35;
+  --lh-5: 1.45;
+  --lh-6: 1.55;
+  --lh-7: 1.65;
+  --lh-8: 1.7;
+  --lh-9: 1.8;
+  --lh-10: 2;
+
+  --sans: 'Inter Variable', 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  /* For `--mono`, Latin glyphs come from JetBrains Mono. CJK has no real
+     monospace equivalent — both Windows' and macOS' default mono CJK
+     (SimSun / Osaka) look bitmap-ugly next to Inter. We therefore fall
+     back to the same CJK sans as `--sans`, and ultimately to
+     `sans-serif` (not `monospace`) so unexpected characters keep the
+     house look instead of flipping to SimSun. */
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
+[data-theme='dark'] {
+  /* dark mode 同样染蓝调,亮度阶梯跟 tokens-orange.css 对齐,C 略加重一档让"暗蓝"明显 */
+  --bg-0: oklch(0.155 0.014 263);
+  --bg-1: oklch(0.195 0.018 263);
+  --bg-2: oklch(0.228 0.022 263);
+  --bg-3: oklch(0.265 0.025 263);
+  --bg-4: oklch(0.305 0.035 263);
+  --bg-mid: oklch(0.175 0.016 263);
+
+  /* 深色模式对调:中栏亮一档(对应浅色 bg-1 那档明度),主区深一档(对应浅色 bg-mid 那档),
+     色相切到 accent-h,跟 LeftRail / 主区冷蓝连成一片。 */
+  --panel-mid-bg: oklch(0.205 0.025 var(--accent-h));
+  --panel-main-bg: var(--bg-mid);
+
+  --line: oklch(0.32 0.025 263 / 0.5);
+  --line-soft: oklch(0.32 0.025 263 / 0.28);
+
+  --fg-0: oklch(0.97 0.018 263);
+  --fg-1: oklch(0.82 0.022 263);
+  --fg-2: oklch(0.62 0.03 263);
+  --fg-3: oklch(0.46 0.028 263);
+
+  --accent: oklch(0.74 0.18 var(--accent-h));
+  --accent-soft: oklch(0.74 0.18 var(--accent-h) / 0.14);
+  --accent-ring: oklch(0.74 0.18 var(--accent-h) / 0.35);
+  --accent-fg: oklch(0.98 0.02 var(--accent-h));
+  --selection-bg: oklch(0.78 0.14 var(--accent-h) / 0.22);
+
+  --ok: oklch(0.78 0.15 154);
+  --warn: oklch(0.82 0.14 67);
+  --err: oklch(0.75 0.18 26);
+  --info: oklch(0.76 0.12 230);
+  --brand-2: oklch(0.72 0.21 277);
+
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-2: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -4px oklch(0 0 0 / 0.5);
+  --shadow-3: 0 8px 24px -8px oklch(0 0 0 / 0.6);
+  --shadow-4: 0 20px 60px -10px oklch(0 0 0 / 0.75);
+  --shadow-drawer: -8px 0 24px oklch(0 0 0 / 0.4);
+  --shadow-knob: 0 1px 2px oklch(0 0 0 / 0.4);
+
+  --overlay-1: oklch(0 0 0 / 0.5);
+  --overlay-2: oklch(0 0 0 / 0.6);
+  --overlay-3: oklch(0 0 0 / 0.85);
+
+  --traffic-unfocused-bg: oklch(0.52 0.003 263);
+  --traffic-unfocused-border: oklch(0.44 0.003 263);
+}
