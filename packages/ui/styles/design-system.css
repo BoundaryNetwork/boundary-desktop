@@ -1,0 +1,251 @@
+/* boundary-desktop 设计系统层(bd-*)。
+   壳发布、模块消费的组件/工具类,全部建在 token 之上。
+   归属规范:壳独占 token 与 bd-*;模块只消费,不得覆写 bd-*、不得定义全局类
+   (模块专属样式走模块作用域:scoped 根类或内联)。CSS 类层与框架无关——
+   纯 DOM 模块同样可用 class="bd-card"。 */
+
+/* —— 文本 —— */
+.bd-section {
+  margin: var(--space-9) 0 var(--space-5);
+  font-size: var(--text-4);
+  font-weight: 600;
+  color: var(--fg-0);
+}
+.bd-title {
+  font-size: var(--text-4);
+  color: var(--fg-0);
+}
+.bd-desc {
+  font-size: var(--text-2);
+  color: var(--fg-2);
+}
+
+/* —— 分组卡片 + 行 —— */
+.bd-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-5);
+  overflow: hidden;
+}
+.bd-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-7) var(--space-8);
+}
+.bd-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+/* 卡片内相邻行/条目间分隔线 */
+.bd-card > .bd-row:not(:last-child),
+.bd-card > .bd-entry:not(:last-child),
+.bd-card > .bd-field:not(:last-child) {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* 可点击行(hover + 末尾 chevron 由调用方放) */
+.bd-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-7) var(--space-8);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 120ms;
+}
+.bd-entry:hover {
+  background: var(--bg-3);
+}
+
+/* —— 字段(竖排 label + 控件) —— */
+.bd-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.bd-field__label {
+  font-size: var(--text-4);
+  font-weight: 500;
+  color: var(--fg-1);
+}
+
+/* —— 侧栏导航条目 —— */
+.bd-navitem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--r-4);
+  border: none;
+  background: transparent;
+  color: var(--fg-1);
+  font-family: inherit;
+  font-size: var(--text-4);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.bd-navitem:hover {
+  background: var(--bg-3);
+}
+.bd-navitem--on,
+.bd-navitem--on:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* —— 按钮 —— */
+.bd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-7);
+  border-radius: var(--r-3);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-1);
+  font-family: inherit;
+  font-size: var(--text-3);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, opacity 120ms, border-color 120ms;
+}
+.bd-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.bd-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+.bd-btn--ghost:hover {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.bd-btn--danger {
+  color: var(--err);
+  border-color: color-mix(in oklch, var(--err) 35%, transparent);
+  background: color-mix(in oklch, var(--err) 8%, transparent);
+}
+.bd-btn--icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--fg-2);
+}
+.bd-btn--icon:hover {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+
+/* 胶囊小按钮(建议项 / 标签触发) */
+.bd-chip {
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+  border-radius: var(--r-7);
+  padding: var(--space-3) var(--space-7);
+  font-size: var(--text-3);
+  color: var(--fg-0);
+  cursor: pointer;
+  font-family: inherit;
+}
+.bd-chip:hover {
+  background: var(--bg-3);
+}
+
+/* —— 输入 —— */
+.bd-input,
+.bd-textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--bg-1);
+  color: var(--fg-0);
+  font-family: inherit;
+  font-size: var(--text-3);
+  outline: none;
+  transition: border-color 120ms;
+}
+.bd-input {
+  height: 36px;
+  padding: 0 var(--space-5);
+}
+.bd-textarea {
+  padding: var(--space-5) var(--space-6);
+  line-height: var(--lh-5);
+  resize: vertical;
+  min-height: 92px;
+}
+.bd-input:focus,
+.bd-textarea:focus {
+  border-color: var(--accent-ring);
+}
+
+/* —— 分段控件(选中项加 .bd-seg--on) —— */
+.bd-segmented {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-3);
+  border-radius: var(--r-pill);
+}
+.bd-seg {
+  padding: var(--space-3) var(--space-7);
+  border-radius: var(--r-pill);
+  border: none;
+  background: transparent;
+  color: var(--fg-2);
+  font-family: inherit;
+  font-size: var(--text-3);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.bd-seg--on {
+  background: var(--bg-1);
+  color: var(--fg-0);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+
+/* —— 状态徽标(默认 accent,另有 ok / warn) —— */
+.bd-badge {
+  display: inline-block;
+  font-size: var(--text-2);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--r-pill);
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.bd-badge--ok {
+  color: var(--ok);
+  background: color-mix(in oklch, var(--ok) 14%, transparent);
+  border-color: color-mix(in oklch, var(--ok) 30%, transparent);
+}
+.bd-badge--warn {
+  color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 14%, transparent);
+  border-color: color-mix(in oklch, var(--warn) 30%, transparent);
+}
+
+/* —— 空/占位态 —— */
+.bd-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--fg-2);
+}

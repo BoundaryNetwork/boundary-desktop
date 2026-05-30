@@ -3,9 +3,9 @@ import { CircleUserRound } from "lucide-react";
 import type { UserInfo } from "@boundary-desktop/contract";
 import { Icons } from "./icons";
 
-/** 系统设置弹层。两栏骨架:左分类导航 + 右分组卡片。
- *  个人信息(含退出登录)与通用(主题 / 运行环境)收在这里。
- *  主题切换直接驱动 <html data-theme>,持久化到 localStorage。 */
+/** 系统设置弹层。两栏:左分类导航(整高固定)+ 右内容列(固定 header + 可滚 body)。
+ *  视觉全部走设计系统类 bd-*(壳发布的样式契约),仅 modal 自身布局用内联。
+ *  个人信息(账号/昵称/个性化信息 + 退出登录)与通用(主题/运行环境)收在这里。 */
 
 type Category = "profile" | "general";
 type Theme = "light" | "dark";
@@ -53,7 +53,7 @@ export function SettingsModal({
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        {/* 左侧栏:整高固定,含设置标题 + 分类导航 */}
+        {/* 左侧栏:整高固定,设置标题 + 分类导航 */}
         <nav style={navStyle}>
           <div style={navTitleStyle}>设置</div>
           <NavItem
@@ -81,15 +81,8 @@ export function SettingsModal({
               aria-label="关闭"
               title="关闭"
               onClick={onClose}
-              style={closeBtnStyle}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--bg-3)";
-                e.currentTarget.style.color = "var(--fg-0)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = "var(--fg-2)";
-              }}
+              className="bd-btn bd-btn--icon"
+              style={closeBtnPos}
             >
               <Icons.x size={18} />
             </button>
@@ -158,42 +151,51 @@ function ProfilePane({ user, onLogout }: { user: UserInfo; onLogout: () => void 
 
   return (
     <div style={columnStyle}>
-      <SectionLabel>基本信息</SectionLabel>
-      <Group>
+      <div className="bd-section">基本信息</div>
+      <div className="bd-card">
         <Row title="账号" sub="登录账号,不可修改">
           <span style={{ fontSize: "var(--text-3)", color: "var(--fg-2)", fontFamily: "var(--mono)" }}>{account}</span>
         </Row>
-        <Row title="昵称" sub="显示名称" last>
-          <TextInput value={nickname} onChange={setNickname} placeholder="设置昵称" />
+        <Row title="昵称" sub="显示名称">
+          <input
+            className="bd-input"
+            style={{ width: 220 }}
+            value={nickname}
+            placeholder="设置昵称"
+            onChange={(e) => setNickname(e.target.value)}
+          />
         </Row>
-      </Group>
-
-      <SectionLabel>个性化信息</SectionLabel>
-      <Group>
-        <div style={{ padding: "var(--space-7) var(--space-8)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-          <div style={{ fontSize: "var(--text-2)", color: "var(--fg-2)" }}>
-            偏好、习惯、背景信息等,供助理参考
-          </div>
-          <TextArea value={preferences} onChange={setPreferences} placeholder="例如:我负责一家天猫店,主营家居用品,语气偏正式…" />
-        </div>
-      </Group>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-6)" }}>
-        <PrimaryButton onClick={save} disabled={!dirty}>
-          保存
-        </PrimaryButton>
       </div>
 
-      <SectionLabel>账户与安全</SectionLabel>
-      <Group>
+      <div className="bd-section">个性化信息</div>
+      <div className="bd-card">
+        <div style={{ padding: "var(--space-7) var(--space-8)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          <div className="bd-desc">偏好、习惯、背景信息等,供助理参考</div>
+          <textarea
+            className="bd-textarea"
+            value={preferences}
+            placeholder="例如:我负责一家天猫店,主营家居用品,语气偏正式…"
+            onChange={(e) => setPreferences(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-6)" }}>
+        <button type="button" className="bd-btn bd-btn--primary" disabled={!dirty} onClick={save}>
+          保存
+        </button>
+      </div>
+
+      <div className="bd-section">账户与安全</div>
+      <div className="bd-card">
         <EntryRow title="修改密码" sub="设置新的登录密码" onClick={() => {}} />
-        <Row title="退出登录" sub="退出当前账户并返回登录页" last>
-          <DangerButton onClick={onLogout}>
+        <Row title="退出登录" sub="退出当前账户并返回登录页">
+          <button type="button" className="bd-btn bd-btn--danger" onClick={onLogout}>
             <Icons.logout size={15} stroke={1.9} />
             退出登录
-          </DangerButton>
+          </button>
         </Row>
-      </Group>
+      </div>
     </div>
   );
 }
@@ -209,7 +211,7 @@ function GeneralPane({
 }): JSX.Element {
   return (
     <div style={columnStyle}>
-      <Group>
+      <div className="bd-card">
         <Row title="主题" sub="界面外观">
           <Segmented
             value={theme}
@@ -220,15 +222,17 @@ function GeneralPane({
             onChange={onTheme}
           />
         </Row>
-        <Row title="运行环境" sub="模块来源与缓存按环境隔离" last>
-          <EnvBadge env={env} />
+        <Row title="运行环境" sub="模块来源与缓存按环境隔离">
+          <span className={`bd-badge${env === "staging" ? " bd-badge--warn" : env === "prod" ? " bd-badge--ok" : ""}`}>
+            {env || "—"}
+          </span>
         </Row>
-      </Group>
+      </div>
     </div>
   );
 }
 
-// ── 基础件 ────────────────────────────────────────────────────────────
+// ── 基础件(均渲染 bd-* 类,样式归设计系统) ──────────────────────────
 
 function NavItem({
   icon,
@@ -241,93 +245,35 @@ function NavItem({
   active: boolean;
   onClick: () => void;
 }): JSX.Element {
-  const [hovered, setHovered] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-5)",
-        padding: "var(--space-5) var(--space-6)",
-        borderRadius: "var(--r-4)",
-        border: "none",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        fontSize: "var(--text-4)",
-        fontWeight: active ? 600 : 400,
-        textAlign: "left",
-        background: active ? "var(--accent-soft)" : hovered ? "var(--bg-3)" : "transparent",
-        color: active ? "var(--accent)" : "var(--fg-1)",
-        transition: "background 120ms, color 120ms",
-      }}
-    >
+    <button type="button" className={`bd-navitem${active ? " bd-navitem--on" : ""}`} onClick={onClick}>
       <span style={{ display: "inline-flex", flex: "none" }}>{icon}</span>
       {label}
     </button>
   );
 }
 
-function SectionLabel({ children }: { children: ReactNode }): JSX.Element {
+function Row({ title, sub, children }: { title: string; sub?: string; children: ReactNode }): JSX.Element {
   return (
-    <div
-      style={{
-        margin: "var(--space-9) 0 var(--space-5)",
-        fontSize: "var(--text-4)",
-        fontWeight: 600,
-        color: "var(--fg-0)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Group({ children }: { children: ReactNode }): JSX.Element {
-  return (
-    <div
-      style={{
-        background: "var(--bg-2)",
-        border: "1px solid var(--line)",
-        borderRadius: "var(--r-5)",
-        overflow: "hidden",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Row({
-  title,
-  sub,
-  last,
-  children,
-}: {
-  title: string;
-  sub?: string;
-  last?: boolean;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-8)",
-        padding: "var(--space-7) var(--space-8)",
-        borderBottom: last ? "none" : "1px solid var(--line-soft)",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-4)", color: "var(--fg-0)" }}>{title}</div>
-        {sub ? <div style={{ fontSize: "var(--text-2)", color: "var(--fg-2)" }}>{sub}</div> : null}
+    <div className="bd-row">
+      <div className="bd-row__main">
+        <div className="bd-title">{title}</div>
+        {sub ? <div className="bd-desc">{sub}</div> : null}
       </div>
       <div style={{ flex: "none" }}>{children}</div>
     </div>
+  );
+}
+
+function EntryRow({ title, sub, onClick }: { title: string; sub?: string; onClick: () => void }): JSX.Element {
+  return (
+    <button type="button" className="bd-entry" onClick={onClick}>
+      <div className="bd-row__main">
+        <div className="bd-title">{title}</div>
+        {sub ? <div className="bd-desc">{sub}</div> : null}
+      </div>
+      <Icons.chevronRight size={16} stroke={1.8} style={{ color: "var(--fg-3)", flex: "none" }} />
+    </button>
   );
 }
 
@@ -341,235 +287,22 @@ function Segmented<T extends string>({
   onChange: (v: T) => void;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: "var(--space-1)",
-        padding: "var(--space-1)",
-        background: "var(--bg-3)",
-        borderRadius: "var(--r-pill)",
-      }}
-    >
-      {options.map((o) => {
-        const on = o.value === value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            style={{
-              padding: "var(--space-3) var(--space-7)",
-              borderRadius: "var(--r-pill)",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              fontSize: "var(--text-3)",
-              fontWeight: on ? 600 : 400,
-              background: on ? "var(--bg-1)" : "transparent",
-              color: on ? "var(--fg-0)" : "var(--fg-2)",
-              boxShadow: on ? "var(--shadow-1)" : "none",
-              transition: "background 120ms, color 120ms",
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div className="bd-segmented">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={`bd-seg${o.value === value ? " bd-seg--on" : ""}`}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-function EnvBadge({ env }: { env: string }): JSX.Element {
-  const label = env || "—";
-  const accent = env === "staging" ? "var(--warn)" : env === "prod" ? "var(--ok)" : "var(--accent)";
-  return (
-    <span
-      style={{
-        fontSize: "var(--text-2)",
-        fontWeight: 600,
-        textTransform: "uppercase",
-        letterSpacing: "0.04em",
-        padding: "var(--space-2) var(--space-5)",
-        borderRadius: "var(--r-pill)",
-        color: accent,
-        background: `color-mix(in oklch, ${accent} 14%, transparent)`,
-        border: `1px solid color-mix(in oklch, ${accent} 30%, transparent)`,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function DangerButton({ onClick, children }: { onClick: () => void; children: ReactNode }): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "var(--space-3)",
-        padding: "var(--space-4) var(--space-7)",
-        borderRadius: "var(--r-3)",
-        border: "1px solid color-mix(in oklch, var(--err) 35%, transparent)",
-        background: "color-mix(in oklch, var(--err) 8%, transparent)",
-        color: "var(--err)",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        fontSize: "var(--text-3)",
-        fontWeight: 500,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function TextInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}): JSX.Element {
-  const [focused, setFocused] = useState(false);
-  return (
-    <input
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      style={{
-        width: 220,
-        padding: "var(--space-3) var(--space-5)",
-        borderRadius: "var(--r-3)",
-        border: `1px solid ${focused ? "var(--accent-ring)" : "var(--line)"}`,
-        background: "var(--bg-1)",
-        color: "var(--fg-0)",
-        fontFamily: "inherit",
-        fontSize: "var(--text-3)",
-        outline: "none",
-        transition: "border-color 120ms",
-      }}
-    />
-  );
-}
-
-function TextArea({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}): JSX.Element {
-  const [focused, setFocused] = useState(false);
-  return (
-    <textarea
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      rows={4}
-      style={{
-        width: "100%",
-        resize: "vertical",
-        minHeight: 92,
-        padding: "var(--space-5) var(--space-6)",
-        borderRadius: "var(--r-3)",
-        border: `1px solid ${focused ? "var(--accent-ring)" : "var(--line)"}`,
-        background: "var(--bg-1)",
-        color: "var(--fg-0)",
-        fontFamily: "inherit",
-        fontSize: "var(--text-3)",
-        lineHeight: "var(--lh-5)",
-        outline: "none",
-        transition: "border-color 120ms",
-      }}
-    />
-  );
-}
-
-function EntryRow({
-  title,
-  sub,
-  onClick,
-}: {
-  title: string;
-  sub?: string;
-  onClick: () => void;
-}): JSX.Element {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-8)",
-        width: "100%",
-        padding: "var(--space-7) var(--space-8)",
-        background: hovered ? "var(--bg-3)" : "transparent",
-        border: "none",
-        borderBottom: "1px solid var(--line-soft)",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        textAlign: "left",
-        transition: "background 120ms",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-4)", color: "var(--fg-0)" }}>{title}</div>
-        {sub ? <div style={{ fontSize: "var(--text-2)", color: "var(--fg-2)" }}>{sub}</div> : null}
-      </div>
-      <Icons.chevronRight size={16} stroke={1.8} style={{ color: "var(--fg-3)", flex: "none" }} />
-    </button>
-  );
-}
-
-function PrimaryButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: "var(--space-4) var(--space-9)",
-        borderRadius: "var(--r-3)",
-        border: "none",
-        background: "var(--accent)",
-        color: "#fff",
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-        fontFamily: "inherit",
-        fontSize: "var(--text-3)",
-        fontWeight: 500,
-        transition: "opacity 120ms",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ── 样式 ──────────────────────────────────────────────────────────────
+// ── modal 自身布局(bespoke,内联) ────────────────────────────────────
 
 const overlayStyle: CSSProperties = {
   position: "fixed",
@@ -637,23 +370,13 @@ const bodyStyle: CSSProperties = {
   padding: "var(--space-2) var(--space-9) var(--space-12)",
 };
 
-/** 右列内容列:header 标题与 body 卡片共用,使两者左右边界一致。 */
+/** header 标题与 body 卡片共用的居中列,使两者左右边界一致。 */
 const columnStyle: CSSProperties = {
   width: "100%",
 };
 
-const closeBtnStyle: CSSProperties = {
+const closeBtnPos: CSSProperties = {
   position: "absolute",
   top: "var(--space-6)",
   right: "var(--space-6)",
-  width: 32,
-  height: 32,
-  display: "inline-grid",
-  placeItems: "center",
-  borderRadius: "var(--r-3)",
-  border: "none",
-  background: "transparent",
-  color: "var(--fg-2)",
-  cursor: "pointer",
-  transition: "background 120ms, color 120ms",
 };

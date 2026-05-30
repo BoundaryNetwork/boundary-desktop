@@ -1,0 +1,3 @@
+/* 样式契约聚合入口:token + 设计系统类。基座 import 一次即全局加载。 */
+@import "./tokens.css";
+@import "./design-system.css";

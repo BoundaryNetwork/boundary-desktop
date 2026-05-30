@@ -1,0 +1,12 @@
+{
+  "name": "@boundary-desktop/ui",
+  "version": "0.1.0",
+  "description": "样式契约:设计 token + bd-* 设计系统类(基座发布、模块消费,版本对齐 HOST_API_VERSION)",
+  "type": "module",
+  "exports": {
+    "./styles.css": "./styles/index.css",
+    "./tokens.css": "./styles/tokens.css",
+    "./design-system.css": "./styles/design-system.css"
+  },
+  "files": ["styles"]
+}

@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import "@boundary-desktop/ui/styles.css"; // 样式契约(token + bd-*),先于壳 chrome 加载
 import "./styles.css";
 
 // macOS hiddenInset:首帧前同步打类,让 rail 顶部红绿灯 strip 立即占位,
