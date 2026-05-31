@@ -85,6 +85,7 @@ export default defineModule<MainContext>({
         broadcast();
       }),
     );
+    track(s.detached.subscribe(() => broadcast())); // 分离态变更 → chrome 页切 分离/合并 按钮
 
     // chrome 页 → main 指令(仅采信 chrome 页自身的发送者)。
     listen(CH.ready, (e) => chrome(e) && broadcast()); // 页面订阅就绪 → 推当前全量态
@@ -99,6 +100,8 @@ export default defineModule<MainContext>({
     listen(CH.closeTab, (e, id) => {
       if (chrome(e) && typeof id === "number" && store!.close(id)) store!.open(""); // 关到空则补一个
     });
+    listen(CH.detach, (e) => chrome(e) && void s.detach());
+    listen(CH.merge, (e) => chrome(e) && void s.merge());
   },
 
   deactivate() {
@@ -135,7 +138,12 @@ function broadcast(): void {
   const cwc = chromeView?.webContents;
   if (!cwc || cwc.isDestroyed() || !store) return;
   const snap = store.snapshot();
-  const state: ChromeState = { tabs: snap.tabs as TabMeta[], activeTabId: snap.activeTabId, theme };
+  const state: ChromeState = {
+    tabs: snap.tabs as TabMeta[],
+    activeTabId: snap.activeTabId,
+    theme,
+    detached: surface?.detached.get() ?? false,
+  };
   cwc.send(CH.state, state);
 }
 

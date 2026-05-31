@@ -10,6 +10,8 @@ export const CH = {
   newTab: "browser-chrome:new-tab",
   switchTab: "browser-chrome:switch-tab", // (id)
   closeTab: "browser-chrome:close-tab", // (id)
+  detach: "browser-chrome:detach", // 把 surface 分离为独立窗口
+  merge: "browser-chrome:merge", // 合并回主窗
   ready: "browser-chrome:ready", // 页面订阅就绪后拉一次全量态(避开首帧广播早于监听注册的竞态)
   // main → chrome 页(标签列表 + 活动标签导航态 + 主题)
   state: "browser-chrome:state",
@@ -30,6 +32,7 @@ export interface ChromeState {
   tabs: TabMeta[];
   activeTabId: number | null;
   theme: "light" | "dark";
+  detached: boolean;
 }
 
 /** preload 经 contextBridge 暴露给 chrome 页的桥(window.tabAPI)。 */
@@ -41,6 +44,8 @@ export interface TabApi {
   newTab(): void;
   switchTab(id: number): void;
   closeTab(id: number): void;
+  detach(): void;
+  merge(): void;
   /** 订阅就绪后拉一次当前全量态。 */
   ready(): void;
   /** 订阅全量态;返回退订函数。 */

@@ -30,6 +30,8 @@ const api: TabApi = {
   newTab: () => ipcRenderer.send(CH.newTab),
   switchTab: (id) => ipcRenderer.send(CH.switchTab, id),
   closeTab: (id) => ipcRenderer.send(CH.closeTab, id),
+  detach: () => ipcRenderer.send(CH.detach),
+  merge: () => ipcRenderer.send(CH.merge),
   ready: () => ipcRenderer.send(CH.ready),
   onState: (cb) => {
     const h = (_e: unknown, s: ChromeState): void => cb(s);

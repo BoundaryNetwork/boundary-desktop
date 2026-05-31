@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-const EMPTY: ChromeState = { tabs: [], activeTabId: null, theme: "light" };
+const EMPTY: ChromeState = { tabs: [], activeTabId: null, theme: "light", detached: false };
 
 /** 地址栏输入归一成可导航 URL:有 scheme 直接用;像域名补 https://;其余当搜索词。 */
 function toUrl(input: string): string {
@@ -69,6 +69,16 @@ export function Toolbar(): JSX.Element {
           style={{ width: 28, height: 28, padding: 0, flex: "none", fontSize: 18, lineHeight: 1 }}
         >
           +
+        </button>
+        <button
+          type="button"
+          className="bd-btn"
+          aria-label={state.detached ? "合并回主窗" : "分离为独立窗口"}
+          title={state.detached ? "合并回主窗" : "分离为独立窗口"}
+          onClick={() => (state.detached ? window.tabAPI.merge() : window.tabAPI.detach())}
+          style={{ width: 28, height: 28, padding: 0, flex: "none", fontSize: 14, lineHeight: 1 }}
+        >
+          {state.detached ? "⊟" : "⧉"}
         </button>
       </div>
 
