@@ -88,18 +88,27 @@ async function buildModule({ dir, runtime }) {
     jsx: "transform", // 经典 JSX:React.createElement,模块自带 import React
     logLevel: "warning",
   });
-  // 模块自带 chrome 页(main 模块的 renderer 资产,载入自己的 WebContentsView):多入口,
-  // 页面 bundle external react(经 app:// + import map 指向 vendor),preload external electron。
-  if (existsSync(join(dir, "src", "chrome", "main.tsx"))) await buildChromePage(dir);
+  // 模块自带的 renderer 页(main 模块载入自己的 WebContentsView,如 chrome 工具栏 / newtab 主页):
+  // 发现 src/<page>/main.tsx 逐个构建成 dist/<page>/,external react 经 import map → vendor;
+  // 有同目录 preload.ts 才出 preload.mjs(chrome 有、newtab 无)。
+  await buildModulePages(dir);
   // 模块内置资源(如自动化 DSL 脚本)随包:scripts/ → dist/scripts/,模块运行时 fs 读自有目录。
   if (existsSync(join(dir, "scripts"))) await cp(join(dir, "scripts"), join(dir, "dist", "scripts"), { recursive: true });
 }
 
-async function buildChromePage(dir) {
-  const chromeSrc = join(dir, "src", "chrome");
-  const outDir = join(dir, "dist", "chrome");
+async function buildModulePages(dir) {
+  const srcDir = join(dir, "src");
+  const subs = await readdir(srcDir, { withFileTypes: true }).catch(() => []);
+  for (const e of subs) {
+    if (e.isDirectory() && existsSync(join(srcDir, e.name, "main.tsx"))) await buildPage(dir, e.name);
+  }
+}
+
+async function buildPage(dir, name) {
+  const src = join(dir, "src", name);
+  const outDir = join(dir, "dist", name);
   await build({
-    entryPoints: [join(chromeSrc, "main.tsx")],
+    entryPoints: [join(src, "main.tsx")],
     bundle: true,
     format: "esm",
     outfile: join(outDir, "main.mjs"),
@@ -108,17 +117,19 @@ async function buildChromePage(dir) {
     jsx: "transform",
     logLevel: "warning",
   });
-  await build({
-    entryPoints: [join(chromeSrc, "preload.ts")],
-    bundle: true,
-    format: "esm",
-    outfile: join(outDir, "preload.mjs"),
-    platform: "node",
-    external: ["electron"], // preload 在渲染进程的特权上下文,直接用 electron
-    logLevel: "warning",
-  });
+  if (existsSync(join(src, "preload.ts"))) {
+    await build({
+      entryPoints: [join(src, "preload.ts")],
+      bundle: true,
+      format: "esm",
+      outfile: join(outDir, "preload.mjs"),
+      platform: "node",
+      external: ["electron"], // preload 在渲染进程的特权上下文,直接用 electron
+      logLevel: "warning",
+    });
+  }
   await mkdir(outDir, { recursive: true });
-  await copyFile(join(chromeSrc, "index.html"), join(outDir, "index.html")); // 带 import map 的页面壳
+  await copyFile(join(src, "index.html"), join(outDir, "index.html")); // 带 import map 的页面壳
 }
 
 await buildVendor();

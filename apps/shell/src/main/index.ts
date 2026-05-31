@@ -1,11 +1,16 @@
 import { join } from "node:path";
-import { BrowserWindow, app, ipcMain } from "electron";
+import { BrowserWindow, app, ipcMain, session } from "electron";
 import { HostServices, Registry, startWsFacade } from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
 import { ShellAuthDriver } from "./auth.js";
-import { registerAppProtocol, registerAppScheme, setVendorDir } from "./app-protocol.js";
+import {
+  registerAppProtocol,
+  registerAppProtocolForSession,
+  registerAppScheme,
+  setVendorDir,
+} from "./app-protocol.js";
 import { createModuleSource } from "./env.js";
 import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
@@ -173,6 +178,11 @@ function createWindow(): void {
 
 void app.whenReady().then(async () => {
   registerAppProtocol();
+  // 模块内容视图用自有 partition(非默认 session),给每个新建 session 也注册 app:// 处理器,
+  // 让 partition 里的页面(如浏览器 newtab 主页)能经 app:// 载入模块资产。
+  app.on("session-created", (ses) => {
+    if (ses !== session.defaultSession) registerAppProtocolForSession(ses);
+  });
   registerIpc();
   createWindow();
 
