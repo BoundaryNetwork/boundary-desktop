@@ -32,6 +32,10 @@ const hostApi: HostApi = {
     activate: (id) => ipcRenderer.invoke(IPC.modulesActivate, id) as Promise<void>,
     deactivate: (id) => ipcRenderer.invoke(IPC.modulesDeactivate, id) as Promise<void>,
   },
+  surface: {
+    reportForeground: (id) => ipcRenderer.invoke(IPC.surfaceForeground, id) as Promise<void>,
+    reportTheme: (theme) => ipcRenderer.invoke(IPC.surfaceTheme, theme) as Promise<void>,
+  },
 };
 
 // main → renderer 请求:跑 handler 后按 reqId 回 rtReply。

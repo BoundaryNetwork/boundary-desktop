@@ -13,6 +13,8 @@ import { runtime } from "./runtime";
 export function Shell({ user }: { user: UserInfo }): JSX.Element {
   const [modules, setModules] = useState<ModuleEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // 已打开过的模块:多 active —— 切 rail 只换前台,这些模块保持挂载/激活不被 deactivate。
+  const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [env, setEnv] = useState<string>("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -29,7 +31,21 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     });
   }, []);
 
-  const active = modules.find((m) => m.id === activeId) ?? null;
+  // 前台模块进入"已打开"集合(只增不减:保活);并把前台选择上报给 main 驱动 surface 显隐。
+  useEffect(() => {
+    if (activeId) setOpenedIds((ids) => (ids.includes(activeId) ? ids : [...ids, activeId]));
+    void window.hostApi.surface.reportForeground(activeId);
+  }, [activeId]);
+
+  // 主题归 renderer(data-theme);上报给 main,供 main 模块 surface 跟随。
+  useEffect(() => {
+    const read = (): "light" | "dark" =>
+      document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    void window.hostApi.surface.reportTheme(read());
+    const obs = new MutationObserver(() => void window.hostApi.surface.reportTheme(read()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
 
   return (
     <div
@@ -88,12 +104,16 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
         {/* 模块内容浮在装饰流线之上。macOS 红绿灯落在左侧 rail 顶 strip(已预留),
             主区域不需要单独拖窗带。 */}
         <div style={{ position: "relative", zIndex: 1, flex: 1, minHeight: 0 }}>
-          {active ? (
-            <ModuleView key={active.id} entry={active} />
-          ) : (
+          {modules.length === 0 ? (
             <div className="content__placeholder" style={{ height: "100%", display: "grid", placeItems: "center" }}>
               <p className="content__placeholder-hint">未发现可用模块（检查 modules/ 目录）。</p>
             </div>
+          ) : (
+            // 已打开的模块全部保持挂载(多 active),只切前台可见;非前台 display:none。
+            openedIds.map((id) => {
+              const entry = modules.find((m) => m.id === id);
+              return entry ? <ModuleView key={id} entry={entry} hidden={id !== activeId} /> : null;
+            })
           )}
         </div>
       </main>
@@ -226,8 +246,10 @@ function RailButton({
 }
 
 /** 单个模块的挂载点:提供容器 → 激活模块(经 main Registry)→ 模块渲染进容器。
- *  卸载(切换 tab)时停用模块。容器始终在 DOM 中,加载/失败用覆盖层提示。 */
-function ModuleView({ entry }: { entry: ModuleEntry }): JSX.Element {
+ *  多 active:切前台不卸载,仅 hidden 控制显隐;模块保持激活(后台 tab 继续跑)。
+ *  真正卸载(本组件 unmount,如窗口关闭)时才 deactivate。容器始终在 DOM 中。
+ *  main 模块的界面是主进程 native view(经 surface 铺在右侧),本容器留空、由 view 覆盖。 */
+function ModuleView({ entry, hidden }: { entry: ModuleEntry; hidden: boolean }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [err, setErr] = useState("");
@@ -256,7 +278,7 @@ function ModuleView({ entry }: { entry: ModuleEntry }): JSX.Element {
   }, [entry.id]);
 
   return (
-    <div className="moduleview">
+    <div className="moduleview" style={{ display: hidden ? "none" : undefined }}>
       <div
         className="moduleview__container"
         ref={ref}

@@ -9,12 +9,14 @@ import { registerAppProtocol, registerAppScheme, setVendorDir } from "./app-prot
 import { createModuleSource } from "./env.js";
 import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
+import { SurfaceManager } from "./surface.js";
 
 registerAppScheme(); // 必须在 app ready 前
 
 const authDriver = new ShellAuthDriver();
 const host = new HostServices({ auth: authDriver });
 const bridge = new RendererBridge();
+const surfaces = new SurfaceManager();
 
 // 按 active env(local/staging/prod)构造模块来源:local 扫本地、远程拉对应 catalog
 const { env: activeEnv, source } = createModuleSource();
@@ -29,6 +31,7 @@ const registry = new Registry({
   source,
   loaders: [new RendererLoader(bridge), new MainLoader()],
   capabilityHost: host,
+  surfaceProvider: surfaces,
 });
 
 function shared(): SharedState {
@@ -103,6 +106,10 @@ function registerIpc(): void {
     }),
   );
 
+  // 壳 → main:前台模块 / 主题上报,驱动 main 模块的 surface 显隐与主题
+  ipcMain.handle(IPC.surfaceForeground, (_e, id: string | null) => surfaces.setForeground(id));
+  ipcMain.handle(IPC.surfaceTheme, (_e, theme: "light" | "dark") => surfaces.setTheme(theme));
+
   // renderer runtime → main:ctx 能力,统一按 aid 取该模块的 main 侧 ctx 执行
   ipcMain.handle(IPC.ctxGetShared, () => shared());
   ipcMain.handle(
@@ -148,6 +155,7 @@ function createWindow(): void {
   });
 
   bridge.attach(win.webContents);
+  surfaces.attachWindow(win);
   const subAuth = host.subscribeAuth((state) => {
     win.webContents.send(IPC.authChanged, state); // 壳 UI
     bridge.pushShared(shared()); // 模块 ctx 镜像

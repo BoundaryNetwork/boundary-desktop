@@ -48,6 +48,11 @@ export interface HostApi {
     activate(id: string): Promise<void>;
     deactivate(id: string): Promise<void>;
   };
+  /** 壳把 renderer 才知道的状态(前台模块、主题)上报给 main，驱动 main 模块的 surface。 */
+  surface: {
+    reportForeground(id: string | null): Promise<void>;
+    reportTheme(theme: "light" | "dark"): Promise<void>;
+  };
 }
 
 /** renderer runtime(模块宿主)通过 preload 拿到的桥。负责跨进程模块生命周期与 ctx 能力。 */

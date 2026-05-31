@@ -9,6 +9,9 @@ export const IPC = {
   modulesList: "modules:list",
   modulesActivate: "modules:activate",
   modulesDeactivate: "modules:deactivate",
+  // 壳 → main:把 renderer 才知道的前台选择 / 主题上报给 main 的 surface(驱动 main 模块 view 显隐与主题)
+  surfaceForeground: "surface:foreground",
+  surfaceTheme: "surface:theme",
   // main → 壳(webContents.send)
   authChanged: "auth:changed",
 
