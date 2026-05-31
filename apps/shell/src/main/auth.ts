@@ -11,6 +11,11 @@ export class ShellAuthDriver implements AuthDriver {
   #resolve: ((v: { token: string; user: UserInfo }) => void) | null = null;
 
   login(): Promise<{ token: string; user: UserInfo }> {
+    // 开发便利:BOUNDARY_DEV_AUTOLOGIN 置位时直接放行,免去 GUI 手填登录表单——
+    // 供 headless 验证(起壳跑 WS 门面调模块工具)用,正常运行不设此变量、行为不变。
+    if (process.env.BOUNDARY_DEV_AUTOLOGIN) {
+      return Promise.resolve({ token: "dev-autologin", user: { id: "dev", name: "dev" } });
+    }
     if (this.#promise) return this.#promise; // 已武装则复用,避免重复触发产生悬挂 promise
     this.#promise = new Promise((resolve) => {
       this.#resolve = resolve;
