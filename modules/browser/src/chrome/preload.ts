@@ -27,10 +27,16 @@ const api: TabApi = {
   back: () => ipcRenderer.send(CH.back),
   forward: () => ipcRenderer.send(CH.forward),
   reload: () => ipcRenderer.send(CH.reload),
+  newTab: () => ipcRenderer.send(CH.newTab),
+  switchTab: (id) => ipcRenderer.send(CH.switchTab, id),
+  closeTab: (id) => ipcRenderer.send(CH.closeTab, id),
+  ready: () => ipcRenderer.send(CH.ready),
   onState: (cb) => {
     const h = (_e: unknown, s: ChromeState): void => cb(s);
     ipcRenderer.on(CH.state, h);
-    return () => ipcRenderer.removeListener(CH.state, h);
+    return () => {
+      ipcRenderer.removeListener(CH.state, h);
+    };
   },
 };
 

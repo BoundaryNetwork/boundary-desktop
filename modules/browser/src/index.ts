@@ -1,12 +1,14 @@
-// main-runtime 浏览器模块:能力(view/导航)自包含在模块内。框架只给一块右侧区域(surface),
-// 模块在区域内自排版:顶部 chrome 条(自带的 toolbar 渲染页)+ 下方内容视图。
-// Phase 2a:单内容视图 + 地址栏/前进后退/刷新。多标签(TabStore/tab 条)留 Phase 2b。
+// main-runtime 浏览器模块:能力(标签/导航)自包含在模块内。框架只给一块右侧区域(surface),
+// 模块在区域内自排版:顶部 chrome 条(自带 toolbar 渲染页)+ 下方内容区(每标签一个内容视图)。
+// Phase 2b:多标签(TabStore + TabViewHost)+ 标签条 + 地址栏导航。CDP/工具/自动化留后续。
 import { fileURLToPath } from "node:url";
 import { type WebContents, WebContentsView, ipcMain } from "electron";
 import { defineModule, type Disposable, type MainContext, type Rect } from "@boundary-desktop/contract";
-import { CH, type ChromeState } from "./ipc.js";
+import { CH, type ChromeState, type TabMeta } from "./ipc.js";
+import { TabStore } from "./tab-store.js";
+import { TabViewHost } from "./tab-view-host.js";
 
-const TOOLBAR_H = 44; // chrome 条高度(DIP)
+const TOOLBAR_H = 84; // chrome 条高度(标签条 + 地址栏两行)
 const START_PAGE =
   "data:text/html," +
   encodeURIComponent(
@@ -16,15 +18,18 @@ const START_PAGE =
   );
 
 let chromeView: WebContentsView | null = null;
-let contentView: WebContentsView | null = null;
+let store: TabStore | null = null;
+let host: TabViewHost | null = null;
+let surface: MainContext["surface"] = undefined;
 let theme: "light" | "dark" = "light";
 const cleanups: Array<() => void> = [];
 
 export default defineModule<MainContext>({
   async activate(ctx) {
-    const surface = ctx.surface;
+    surface = ctx.surface;
     if (!surface) throw new Error("browser 模块需要框架分配 UI 区域(MainContext.surface)");
-    theme = surface.theme.get();
+    const s = surface;
+    theme = s.theme.get();
 
     // chrome 条:模块自带的 toolbar 渲染页,经 app:// + import map 载入(react 走宿主 vendor)。
     chromeView = new WebContentsView({
@@ -37,97 +42,93 @@ export default defineModule<MainContext>({
       },
     });
     void chromeView.webContents.loadURL(`app://modules/${ctx.self.id}/${ctx.self.version}/chrome/index.html`);
+    s.attach(chromeView);
 
-    // 内容视图(当前为单标签;Phase 2b 改为每标签一个)。
-    contentView = new WebContentsView();
-    paintBg(contentView);
-    void contentView.webContents.loadURL(START_PAGE);
-
-    surface.attach(chromeView); // 句柄由 ctx 自动 track,deactivate 时框架摘除
-    surface.attach(contentView);
+    // 标签状态 + 内容视图宿主。store 变更 → 视图 diff + 重排 + 广播给 chrome 页。
+    store = new TabStore(() => {
+      host?.sync(store!.snapshot().tabs);
+      relayout();
+      broadcast();
+    });
+    host = new TabViewHost({
+      attach: (v) => s.attach(v),
+      bg: () => (theme === "dark" ? "#1b1e25" : "#ffffff"),
+      startPage: START_PAGE,
+      onNav: (id, patch) => store!.update(id, patch),
+    });
+    store.open(""); // 初始一个新标签页
 
     // 区域/前台/主题变化 → 模块自排版与自显隐(框架只发状态)。
-    layout(surface.bounds.get(), surface.visible.get());
-    track(surface.bounds.subscribe((b) => layout(b, surface.visible.get())));
-    track(surface.visible.subscribe((v) => layout(surface.bounds.get(), v)));
+    relayout();
+    track(s.bounds.subscribe(() => relayout()));
+    track(s.visible.subscribe(() => relayout()));
     track(
-      surface.theme.subscribe((t) => {
+      s.theme.subscribe((t) => {
         theme = t;
-        if (contentView) paintBg(contentView);
-        pushState();
+        chromeView?.setBackgroundColor(theme === "dark" ? "#1b1e25" : "#ffffff");
+        host?.repaint();
+        broadcast();
       }),
     );
 
-    // 内容视图导航态 → 推给 chrome 页(地址栏/前进后退可用性)。
-    const wc = contentView.webContents;
-    const onNav = (): void => pushState();
-    wc.on("did-navigate", onNav);
-    wc.on("did-navigate-in-page", onNav);
-    wc.on("page-title-updated", onNav);
-    chromeView.webContents.on("did-finish-load", onNav); // chrome 页就绪即喂初始态
-
     // chrome 页 → main 指令(仅采信 chrome 页自身的发送者)。
+    listen(CH.ready, (e) => chrome(e) && broadcast()); // 页面订阅就绪 → 推当前全量态
     listen(CH.navigate, (e, url) => {
-      if (isChrome(e.sender) && typeof url === "string" && url) void contentView?.webContents.loadURL(url);
+      if (chrome(e) && typeof url === "string" && url) void active()?.loadURL(url);
     });
-    listen(CH.back, (e) => {
-      if (isChrome(e.sender)) contentView?.webContents.navigationHistory.goBack();
-    });
-    listen(CH.forward, (e) => {
-      if (isChrome(e.sender)) contentView?.webContents.navigationHistory.goForward();
-    });
-    listen(CH.reload, (e) => {
-      if (isChrome(e.sender)) contentView?.webContents.reload();
+    listen(CH.back, (e) => chrome(e) && active()?.navigationHistory.goBack());
+    listen(CH.forward, (e) => chrome(e) && active()?.navigationHistory.goForward());
+    listen(CH.reload, (e) => chrome(e) && active()?.reload());
+    listen(CH.newTab, (e) => chrome(e) && store!.open(""));
+    listen(CH.switchTab, (e, id) => chrome(e) && typeof id === "number" && store!.switch(id));
+    listen(CH.closeTab, (e, id) => {
+      if (chrome(e) && typeof id === "number" && store!.close(id)) store!.open(""); // 关到空则补一个
     });
   },
 
   deactivate() {
     for (const c of cleanups.splice(0)) c();
-    if (contentView && !contentView.webContents.isDestroyed()) contentView.webContents.close();
+    host?.destroyAll();
     if (chromeView && !chromeView.webContents.isDestroyed()) chromeView.webContents.close();
-    contentView = null;
     chromeView = null;
+    store = null;
+    host = null;
+    surface = undefined;
   },
 });
 
-/** chrome 条铺区域顶部、内容视图占其下;非前台时整体隐藏(框架只发 visible 状态,显隐由模块落地)。 */
-function layout(region: Rect, visible: boolean): void {
+/** chrome 条铺区域顶部、内容区占其下;非前台时整体隐藏(框架只发 visible,显隐由模块落地)。 */
+function relayout(): void {
+  if (!surface) return;
+  const region = surface.bounds.get();
+  const visible = surface.visible.get();
   if (chromeView) {
     chromeView.setVisible(visible);
     chromeView.setBounds({ x: region.x, y: region.y, width: region.width, height: TOOLBAR_H });
   }
-  if (contentView) {
-    contentView.setVisible(visible);
-    contentView.setBounds({
-      x: region.x,
-      y: region.y + TOOLBAR_H,
-      width: region.width,
-      height: Math.max(0, region.height - TOOLBAR_H),
-    });
-  }
+  const content: Rect = {
+    x: region.x,
+    y: region.y + TOOLBAR_H,
+    width: region.width,
+    height: Math.max(0, region.height - TOOLBAR_H),
+  };
+  host?.layout(content, visible, store?.activeId() ?? null);
 }
 
-function pushState(): void {
-  const wc = contentView?.webContents;
+function broadcast(): void {
   const cwc = chromeView?.webContents;
-  if (!wc || !cwc || cwc.isDestroyed() || wc.isDestroyed()) return;
-  const nav = wc.navigationHistory;
-  const state: ChromeState = {
-    url: wc.getURL().startsWith("data:") ? "" : wc.getURL(),
-    title: wc.getTitle(),
-    canGoBack: nav.canGoBack(),
-    canGoForward: nav.canGoForward(),
-    theme,
-  };
+  if (!cwc || cwc.isDestroyed() || !store) return;
+  const snap = store.snapshot();
+  const state: ChromeState = { tabs: snap.tabs as TabMeta[], activeTabId: snap.activeTabId, theme };
   cwc.send(CH.state, state);
 }
 
-function paintBg(view: WebContentsView): void {
-  view.setBackgroundColor(theme === "dark" ? "#1b1e25" : "#ffffff");
+function active(): WebContents | null {
+  return host?.webContents(store?.activeId() ?? null) ?? null;
 }
 
-function isChrome(sender: WebContents): boolean {
-  return sender === chromeView?.webContents;
+function chrome(e: Electron.IpcMainEvent): boolean {
+  return e.sender === chromeView?.webContents;
 }
 
 function track(d: Disposable): void {
@@ -135,7 +136,9 @@ function track(d: Disposable): void {
 }
 
 function listen(channel: string, handler: (e: Electron.IpcMainEvent, arg: unknown) => void): void {
-  const h = (e: Electron.IpcMainEvent, arg: unknown): void => handler(e, arg);
+  const h = (e: Electron.IpcMainEvent, arg: unknown): void => {
+    handler(e, arg);
+  };
   ipcMain.on(channel, h);
   cleanups.push(() => ipcMain.removeListener(channel, h));
 }
