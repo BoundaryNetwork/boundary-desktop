@@ -5,8 +5,13 @@ import { StateContainer, type SurfaceProvider, type TrackDisposable } from "@bou
 /** 左侧导航栏宽度(与 Shell.tsx 的 grid `68px 1fr` 一致)。框架据此算右侧 content 区。 */
 const RAIL_WIDTH = 68;
 
-/** 一个 main 模块本次激活分得的 UI 区域。持有它 attach 进来的 native view、可选的 detach 窗口,
- *  并把 bounds/visible/theme/detached 以只读状态暴露给模块。所有写都由 SurfaceManager 驱动。 */
+/** 一个 main 模块本次激活分得的 UI 区域。
+ *
+ *  职责切分(单一 owner,不分裂):
+ *  - 框架(本类):持 view 的**成员关系/z-order**(attach 加入宿主窗口、detach/merge 整体 re-parent、
+ *    回收时摘除)+ 发布 `bounds`/`visible`/`theme`/`detached` 只读**状态**。
+ *  - 模块:订阅 `bounds`/`visible`,自行对它创建的 view 做 setBounds/setVisible —— 区域内部布局
+ *    (chrome 条 + 内容、active tab 显隐)只有模块知道,框架不替它定位、不替它显隐。 */
 class ManagedSurface implements ModuleSurface {
   readonly bounds = new StateContainer<Rect>({ x: 0, y: 0, width: 0, height: 0 });
   readonly visible = new StateContainer(false);
@@ -32,9 +37,7 @@ class ManagedSurface implements ModuleSurface {
   attach(view: object): Disposable {
     const v = view as WebContentsView;
     this.#views.push(v);
-    this.#host().contentView.addChildView(v);
-    v.setBounds(this.bounds.get());
-    v.setVisible(this.visible.get());
+    this.#host().contentView.addChildView(v); // 只管成员/z-order;bounds 与显隐由模块订阅 state 自理
     return {
       dispose: () => {
         const i = this.#views.indexOf(v);
@@ -63,7 +66,7 @@ class ManagedSurface implements ModuleSurface {
       dw.contentView.addChildView(v);
     }
     this.detached.set(true);
-    this.#reflowDetached();
+    this.#publishDetached();
     // 关闭分离窗口即自动合并回主窗(spec §3.3)。
     dw.on("close", () => {
       if (this.#detachWin === dw) void this.merge();
@@ -85,35 +88,26 @@ class ManagedSurface implements ModuleSurface {
     }
     this.detached.set(false);
     if (!dw.isDestroyed()) dw.destroy();
-    this.#manager.reflow(this); // 回到主窗,按前台规则重排
+    this.#manager.publish(this); // 回到主窗,按前台规则重新发布 bounds/visible
   }
 
-  // --- 以下由 SurfaceManager 调用驱动状态 ---
+  // --- 状态发布(只改 state,模块订阅后自行重排 view)---
 
-  /** 主窗布局/前台/主题变化后重算(仅未分离时受主窗规则约束)。 */
-  reflowMerged(region: Rect, foreground: boolean): void {
+  /** 主窗布局/前台变化:发布右侧区域矩形与前台可见性(仅未分离时随主窗规则)。 */
+  publishMerged(region: Rect, foreground: boolean): void {
     if (this.#detachWin) return;
     this.bounds.set(region);
     this.visible.set(foreground);
-    for (const v of this.#views) {
-      v.setBounds(region);
-      v.setVisible(foreground);
-    }
   }
 
-  #reflowDetached(): void {
+  #publishDetached(): void {
     const dw = this.#detachWin;
     if (!dw) return;
     const cb = dw.getContentBounds();
-    const region: Rect = { x: 0, y: 0, width: cb.width, height: cb.height };
-    this.bounds.set(region);
+    this.bounds.set({ x: 0, y: 0, width: cb.width, height: cb.height });
     this.visible.set(true);
-    for (const v of this.#views) {
-      v.setBounds(region);
-      v.setVisible(true);
-    }
     dw.removeAllListeners("resize");
-    dw.on("resize", () => this.#reflowDetached());
+    dw.on("resize", () => this.#publishDetached());
   }
 
   setTheme(theme: "light" | "dark"): void {
@@ -145,10 +139,10 @@ export class SurfaceManager implements SurfaceProvider {
   #theme: "light" | "dark" = "light";
   #surfaces = new Map<string, ManagedSurface>();
 
-  /** 绑定主窗:resize 即重排所有未分离 surface;窗口关闭解绑。 */
+  /** 绑定主窗:resize 即重新发布所有未分离 surface 的区域;窗口关闭解绑。 */
   attachWindow(win: BrowserWindow): void {
     this.#win = win;
-    const onResize = (): void => this.#reflowAll();
+    const onResize = (): void => this.#publishAll();
     win.on("resize", onResize);
     win.on("resized", onResize);
     win.on("closed", () => {
@@ -161,10 +155,10 @@ export class SurfaceManager implements SurfaceProvider {
     return this.#win;
   }
 
-  /** shell renderer 上报当前前台模块(rail 选中项);更新各 surface 可见性。 */
+  /** shell renderer 上报当前前台模块(rail 选中项);重新发布各 surface 可见性。 */
   setForeground(id: string | null): void {
     this.#foregroundId = id;
-    this.#reflowAll();
+    this.#publishAll();
   }
 
   /** shell renderer 上报主题;下发给所有 surface。 */
@@ -177,7 +171,7 @@ export class SurfaceManager implements SurfaceProvider {
   provide(self: BaseContext["self"], track: TrackDisposable): ModuleSurface {
     const surface = new ManagedSurface(self.id, this, this.#theme);
     this.#surfaces.set(self.id, surface);
-    this.reflow(surface);
+    this.publish(surface);
     track({
       dispose: () => {
         surface.teardown();
@@ -187,14 +181,14 @@ export class SurfaceManager implements SurfaceProvider {
     return surface;
   }
 
-  /** 单个 surface 按当前主窗布局 + 前台规则重排(merge 回主窗后也调)。 */
-  reflow(surface: ManagedSurface): void {
+  /** 单个 surface 按当前主窗布局 + 前台规则发布区域(merge 回主窗后也调)。 */
+  publish(surface: ManagedSurface): void {
     if (!this.#win) return;
-    surface.reflowMerged(this.#contentRegion(), this.#foregroundId === surface.id);
+    surface.publishMerged(this.#contentRegion(), this.#foregroundId === surface.id);
   }
 
-  #reflowAll(): void {
-    for (const s of this.#surfaces.values()) this.reflow(s);
+  #publishAll(): void {
+    for (const s of this.#surfaces.values()) this.publish(s);
   }
 
   /** 右侧 content 区矩形(DIP,相对主窗内容区):rail 右侧、铺满高度。 */

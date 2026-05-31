@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain } from "electron";
-import { HostServices, MainLoader, Registry, startWsFacade } from "@boundary-desktop/host";
+import { HostServices, Registry, startWsFacade } from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
@@ -9,6 +9,7 @@ import { registerAppProtocol, registerAppScheme, setVendorDir } from "./app-prot
 import { createModuleSource } from "./env.js";
 import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
+import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
 
 registerAppScheme(); // 必须在 app ready 前
@@ -29,7 +30,7 @@ setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(import.meta.dirname, "..", 
 
 const registry = new Registry({
   source,
-  loaders: [new RendererLoader(bridge), new MainLoader()],
+  loaders: [new RendererLoader(bridge), new ShellMainLoader()],
   capabilityHost: host,
   surfaceProvider: surfaces,
 });
