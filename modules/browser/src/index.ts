@@ -8,6 +8,8 @@ import { CH, type ChromeState, type TabMeta } from "./ipc.js";
 import { TabStore } from "./tab-store.js";
 import { TabViewHost } from "./tab-view-host.js";
 import { browserTools } from "./tools.js";
+import { automationTools } from "./automation-tools.js";
+import { Runner } from "./runner.js";
 
 const TOOLBAR_H = 84; // chrome 条高度(标签条 + 地址栏两行)
 const START_PAGE =
@@ -21,6 +23,7 @@ const START_PAGE =
 let chromeView: WebContentsView | null = null;
 let store: TabStore | null = null;
 let host: TabViewHost | null = null;
+let runner: Runner | null = null;
 let surface: MainContext["surface"] = undefined;
 let theme: "light" | "dark" = "light";
 const cleanups: Array<() => void> = [];
@@ -63,6 +66,12 @@ export default defineModule<MainContext>({
     for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url) })) {
       ctx.registerTool(def);
     }
+    // automation.* 工具:内置 DSL 脚本(随包到 dist/scripts)+ 串行 runner。
+    const scriptsDir = fileURLToPath(new URL("./scripts/", import.meta.url));
+    runner = new Runner();
+    for (const def of automationTools({ scriptsDir, active: () => active(), runner })) {
+      ctx.registerTool(def);
+    }
 
     // 区域/前台/主题变化 → 模块自排版与自显隐(框架只发状态)。
     relayout();
@@ -99,6 +108,7 @@ export default defineModule<MainContext>({
     chromeView = null;
     store = null;
     host = null;
+    runner = null;
     surface = undefined;
   },
 });

@@ -5,7 +5,7 @@
 // 指向 vendor,一份 React 多模块共享);main 模块 external electron + node 内建(主进程直接 import,
 // 不打包宿主运行时)。
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -91,6 +91,8 @@ async function buildModule({ dir, runtime }) {
   // 模块自带 chrome 页(main 模块的 renderer 资产,载入自己的 WebContentsView):多入口,
   // 页面 bundle external react(经 app:// + import map 指向 vendor),preload external electron。
   if (existsSync(join(dir, "src", "chrome", "main.tsx"))) await buildChromePage(dir);
+  // 模块内置资源(如自动化 DSL 脚本)随包:scripts/ → dist/scripts/,模块运行时 fs 读自有目录。
+  if (existsSync(join(dir, "scripts"))) await cp(join(dir, "scripts"), join(dir, "dist", "scripts"), { recursive: true });
 }
 
 async function buildChromePage(dir) {

@@ -1,0 +1,14 @@
+{
+  "id": "example-extract",
+  "name": "示例:提取元素文本",
+  "description": "导航到给定网址,等待选择器出现,提取其文本到 output.text",
+  "variables": [
+    { "key": "url", "label": "网址", "type": "text", "placeholder": "https://..." },
+    { "key": "selector", "label": "选择器", "type": "text", "default": "h1" }
+  ],
+  "steps": [
+    { "action": "navigate", "value": "{{url}}" },
+    { "action": "waitForElement", "target": { "selector": "{{selector}}" }, "timeout": 10000 },
+    { "action": "extract", "target": { "selector": "{{selector}}" }, "value": { "key": "text" } }
+  ]
+}
