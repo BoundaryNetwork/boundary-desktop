@@ -2,13 +2,20 @@ import { describe, expect, test, vi } from "vitest";
 import {
   defineModule,
   type AuthState,
+  type MainContext,
   type Module,
   type ModuleLoader,
   type ModuleManifest,
+  type ModuleSurface,
   type NetworkState,
   type ReadableState,
 } from "@boundary-desktop/contract";
-import { Registry, type ArtifactSource, type CapabilityHost } from "../src/index.js";
+import {
+  Registry,
+  type ArtifactSource,
+  type CapabilityHost,
+  type SurfaceProvider,
+} from "../src/index.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -52,7 +59,7 @@ class Harness {
   #modules = new Map<string, Module>();
   registry: Registry;
 
-  constructor(opts: { drainTimeoutMs?: number } = {}) {
+  constructor(opts: { drainTimeoutMs?: number; surfaceProvider?: SurfaceProvider } = {}) {
     const source: ArtifactSource = {
       fetchArtifact: async (m) => `memory://${m.id}@${m.version}`,
     };
@@ -68,6 +75,7 @@ class Harness {
       source,
       loaders: [loader],
       capabilityHost: fakeCapabilityHost,
+      surfaceProvider: opts.surfaceProvider,
       drainTimeoutMs: opts.drainTimeoutMs,
     });
   }
@@ -458,5 +466,70 @@ describe("版本闸门", () => {
       h.registry.install(manifest("future", "1.0.0", ">=9.0.0")),
     ).rejects.toThrow(/请升级客户端/);
     expect(h.registry.status("future")).toBe("unloaded");
+  });
+});
+
+describe("main 模块 UI 区域(surface)", () => {
+  const fakeSurface = (): ModuleSurface => ({
+    bounds: readable({ x: 0, y: 0, width: 0, height: 0 }),
+    visible: readable(false),
+    theme: readable<"light" | "dark">("light"),
+    detached: readable(false),
+    attach: () => ({ dispose() {} }),
+    detach: async () => {},
+    merge: async () => {},
+  });
+
+  test("无 provider → main 模块 ctx.surface 为 undefined", async () => {
+    const h = new Harness();
+    let seen: unknown = "unset";
+    h.set(
+      "m",
+      "1.0.0",
+      defineModule<MainContext>({
+        activate(ctx) {
+          seen = ctx.surface;
+        },
+      }),
+    );
+    await h.registry.install(manifest("m"));
+    await h.registry.activate("m");
+    expect(seen).toBeUndefined();
+  });
+
+  test("有 provider → main 模块 ctx 拿到 provider 产出的 surface", async () => {
+    const surface = fakeSurface();
+    const provide = vi.fn(() => surface);
+    const h = new Harness({ surfaceProvider: { provide } });
+    let seen: ModuleSurface | undefined;
+    h.set(
+      "m",
+      "1.0.0",
+      defineModule<MainContext>({
+        activate(ctx) {
+          seen = ctx.surface;
+        },
+      }),
+    );
+    await h.registry.install(manifest("m"));
+    await h.registry.activate("m");
+    expect(provide).toHaveBeenCalledOnce();
+    expect(seen).toBe(surface);
+  });
+
+  test("provider 经 track 注册的 teardown 随 deactivate 回收", async () => {
+    const teardown = vi.fn();
+    const provide: SurfaceProvider["provide"] = (_self, track) => {
+      track({ dispose: teardown });
+      return fakeSurface();
+    };
+    const h = new Harness({ surfaceProvider: { provide } });
+    h.set("m", "1.0.0", defineModule({ activate() {} }));
+    await h.registry.install(manifest("m"));
+    await h.registry.activate("m");
+    expect(teardown).not.toHaveBeenCalled();
+
+    await h.registry.deactivate("m");
+    expect(teardown).toHaveBeenCalledOnce();
   });
 });

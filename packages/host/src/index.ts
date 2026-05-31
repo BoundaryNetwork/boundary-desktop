@@ -5,6 +5,7 @@ export type {
   ModuleCapabilities,
   ModuleSnapshot,
   RegistryOptions,
+  SurfaceProvider,
 } from "./registry.js";
 export type { ToolInfo } from "./tool-registry.js";
 

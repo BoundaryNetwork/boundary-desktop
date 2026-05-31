@@ -6,6 +6,7 @@ import type {
   ModuleManifest,
   ModuleRegistry as IModuleRegistry,
   ModuleStatus,
+  ModuleSurface,
 } from "@boundary-desktop/contract";
 import { HOST_API_VERSION } from "@boundary-desktop/contract";
 import semver from "semver";
@@ -41,10 +42,21 @@ export interface CapabilityHost {
   forModule(self: BaseContext["self"], track: TrackDisposable): ModuleCapabilities;
 }
 
+/** 为 main-runtime 模块提供 UI 区域（MainContext.surface）的环境 seam。
+ *  持有窗口的环境（apps/shell）注入实现；headless / 无 UI 环境不注入 → ctx.surface 为
+ *  undefined（契约允许）。这是通用能力面，框架不含任何功能域语义。 */
+export interface SurfaceProvider {
+  /** 为本次激活产出一个 surface。track 把 surface 的副作用（view 容器等）绑到激活生命周期，
+   *  deactivate 时自动回收。返回 undefined = 该模块不分配区域（如无 ui 入口的纯能力 main 模块）。 */
+  provide(self: BaseContext["self"], track: TrackDisposable): ModuleSurface | undefined;
+}
+
 export interface RegistryOptions {
   source: ArtifactSource;
   loaders: ModuleLoader[];
   capabilityHost: CapabilityHost;
+  /** main-runtime 模块的 UI 区域提供者。持窗口的环境注入；不注入则 main 模块 ctx.surface 为 undefined。 */
+  surfaceProvider?: SurfaceProvider;
   /** 基座实现的契约版本，用于和模块 manifest 的 hostApiVersion 比对。默认取契约包常量。 */
   hostApiVersion?: string;
   /** deactivate/replace 前等在途调用清零的上限，超时则该操作失败。默认 30s。 */
@@ -69,6 +81,7 @@ export class Registry implements IModuleRegistry {
   #source: ArtifactSource;
   #loaders: ModuleLoader[];
   #capabilityHost: CapabilityHost;
+  #surfaceProvider?: SurfaceProvider;
   #hostApiVersion: string;
   #drainTimeoutMs: number;
 
@@ -87,6 +100,7 @@ export class Registry implements IModuleRegistry {
     this.#source = opts.source;
     this.#loaders = opts.loaders;
     this.#capabilityHost = opts.capabilityHost;
+    this.#surfaceProvider = opts.surfaceProvider;
     this.#hostApiVersion = opts.hostApiVersion ?? HOST_API_VERSION;
     this.#drainTimeoutMs = opts.drainTimeoutMs ?? 30_000;
     this.#tools = new ToolRegistry(this.#ledger, () => this.#bumpTools());
@@ -278,7 +292,7 @@ export class Registry implements IModuleRegistry {
       return disposable;
     };
     const capabilities = this.#capabilityHost.forModule(self, track);
-    return {
+    const ctx: BaseContext = {
       self,
       ...capabilities,
       registerTool: (def) =>
@@ -297,6 +311,13 @@ export class Registry implements IModuleRegistry {
         });
       },
     };
+    // main-runtime 模块按 runtime 单维度多拿一个 UI 区域（MainContext.surface）。
+    // 由环境注入的 provider 产出；headless 无 provider → 不挂 surface（契约允许 undefined）。
+    if (manifest.runtime === "main") {
+      const surface = this.#surfaceProvider?.provide(self, track);
+      if (surface) Object.assign(ctx, { surface });
+    }
+    return ctx;
   }
 
   #requireStatus(id: string, expected: ModuleStatus): ModuleRecord {
