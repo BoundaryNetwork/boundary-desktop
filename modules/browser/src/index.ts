@@ -13,13 +13,6 @@ import { automationTools } from "./automation-tools.js";
 import { Runner } from "./runner.js";
 
 const TOOLBAR_H = 88; // chrome 条高度(tab 条 40 + 导航栏 48,与 openclaw #toolbar 对齐)
-const START_PAGE =
-  "data:text/html," +
-  encodeURIComponent(
-    '<!doctype html><meta charset="utf-8">' +
-      '<body style="font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;color:#888">' +
-      "新标签页</body>",
-  );
 
 let chromeView: WebContentsView | null = null;
 let store: TabStore | null = null;
@@ -49,6 +42,11 @@ export default defineModule<MainContext>({
     void chromeView.webContents.loadURL(`app://modules/${ctx.self.id}/${ctx.self.version}/chrome/index.html`);
     s.attach(chromeView);
 
+    // 新标签页 = 模块自带的 newtab 主页(经 app:// 载入,内容视图内 location.href 导航)。
+    const userName = ctx.auth.get().user?.name ?? "";
+    const newtabUrl =
+      `app://modules/${ctx.self.id}/${ctx.self.version}/newtab/index.html?u=${encodeURIComponent(userName)}`;
+
     // 标签状态 + 内容视图宿主。store 变更 → 视图 diff + 重排 + 广播给 chrome 页。
     store = new TabStore(() => {
       host?.sync(store!.snapshot().tabs);
@@ -58,7 +56,7 @@ export default defineModule<MainContext>({
     host = new TabViewHost({
       attach: (v) => s.attach(v),
       bg: () => (theme === "dark" ? "#1b1e25" : "#ffffff"),
-      startPage: START_PAGE,
+      startPage: newtabUrl,
       onNav: (id, patch) => store!.update(id, patch),
     });
     store.open(""); // 初始一个新标签页

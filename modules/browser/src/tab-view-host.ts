@@ -101,8 +101,10 @@ export class TabViewHost {
 function navPatch(wc: WebContents): Partial<Omit<TabMeta, "id">> {
   const nav = wc.navigationHistory;
   const url = wc.getURL();
+  // 新标签页(模块自带 newtab,经 app:// 载入)地址栏留空,不暴露内部 URL。
+  const blank = url.startsWith("data:") || url.includes("/newtab/index.html");
   return {
-    url: url.startsWith("data:") ? "" : url,
+    url: blank ? "" : url,
     title: wc.getTitle(),
     canGoBack: nav.canGoBack(),
     canGoForward: nav.canGoForward(),
