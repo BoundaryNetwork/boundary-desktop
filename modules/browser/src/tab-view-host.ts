@@ -1,4 +1,4 @@
-import { type WebContents, WebContentsView } from "electron";
+import { Menu, type MenuItemConstructorOptions, type WebContents, WebContentsView, app } from "electron";
 import type { Disposable, Rect } from "@boundary-desktop/contract";
 import type { TabMeta } from "./ipc.js";
 
@@ -63,6 +63,27 @@ export class TabViewHost {
     wc.on("did-navigate-in-page", nav);
     wc.on("page-title-updated", () => this.#deps.onNav(id, { title: wc.getTitle() }));
     wc.on("page-favicon-updated", (_e, icons) => this.#deps.onNav(id, { favicon: icons[0] ?? "" }));
+    wc.on("context-menu", (_e, params) => {
+      if (wc.isDestroyed()) return;
+      const nav = wc.navigationHistory;
+      const items: MenuItemConstructorOptions[] = [
+        { label: "后退", enabled: nav.canGoBack(), click: () => !wc.isDestroyed() && nav.goBack() },
+        { label: "前进", enabled: nav.canGoForward(), click: () => !wc.isDestroyed() && nav.goForward() },
+        { label: "重新加载", click: () => !wc.isDestroyed() && wc.reload() },
+        { type: "separator" },
+        { label: "复制", role: "copy", enabled: params.editFlags.canCopy },
+        { label: "粘贴", role: "paste", enabled: params.editFlags.canPaste },
+        { label: "全选", role: "selectAll" },
+      ];
+      // 仅 dev 提供检查元素;打包构建不出现调试入口。
+      if (!app.isPackaged) {
+        items.push(
+          { type: "separator" },
+          { label: "检查元素", click: () => !wc.isDestroyed() && wc.inspectElement(params.x, params.y) },
+        );
+      }
+      Menu.buildFromTemplate(items).popup();
+    });
     const detach = this.#deps.attach(view);
     void wc.loadURL(url || this.#deps.startPage);
     this.#views.set(id, { view, detach });
