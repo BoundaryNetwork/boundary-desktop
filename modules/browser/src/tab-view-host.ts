@@ -51,7 +51,11 @@ export class TabViewHost {
   }
 
   #create(id: number, url: string): void {
-    const view = new WebContentsView();
+    // 浏览器自有持久会话分区:与壳默认 session 隔离(独立 cookie/storage),热拔不污染宿主。
+    // 多账号(per-profile)时改成 `persist:browser-<profileId>` + ctx.storage 存账号元信息(Phase 5 余)。
+    const view = new WebContentsView({
+      webPreferences: { partition: "persist:browser", contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
     view.setBackgroundColor(this.#deps.bg());
     const wc = view.webContents;
     const nav = (): void => this.#deps.onNav(id, navPatch(wc));
