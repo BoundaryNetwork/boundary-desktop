@@ -223,15 +223,43 @@ export interface RendererContext extends BaseContext {
 }
 
 /** 主进程能力 module 额外拿到的能力。
- *  功能子系统(如浏览器/CDP)以可选命名空间形式挂在这里;
- *  基座未启用对应子系统时为 undefined。MCP/CDP 都属于这一层,不进框架核心。 */
+ *  main-runtime 模块自己持有功能子系统(view/CDP/automation),对外能力只经
+ *  `ctx.registerTool` 暴露;框架不为任何具体功能域加能力面。需要原生 UI 的
+ *  main 模块经下面通用的 `surface` 拿一块区域,框架不含功能语义。 */
 export interface MainContext extends BaseContext {
   readonly self: Readonly<Pick<ModuleManifest, "id" | "version" | "runtime">> & {
     runtime: "main";
   };
-  /** 示例功能子系统:浏览器操控。由基座持有页面/CDP 会话,module 经此操作,不持有句柄。 */
-  browser?: BrowserSubsystem;
-  // 其余功能子系统按需扩展,每个都遵循"基座持有资源、module 经 ctx 操作"。
+  /** 框架分配的 UI 区域;无 UI 的纯能力 main 模块为 undefined。 */
+  readonly surface?: ModuleSurface;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** 框架分配给 main 模块的 UI 区域(本项目左右布局里的右侧 content 区;可分离为独立窗口)。
+ *  通用能力,非浏览器专属:任何需要原生 UI 的 main 模块都可用,框架不含功能语义。 */
+export interface ModuleSurface {
+  /** 区域在宿主窗口内容区的矩形(DIP,非屏幕坐标),随 resize / 布局 / detach 变化更新。 */
+  readonly bounds: ReadableState<Rect>;
+  /** 模块是否当前可见(前台)。非可见时模块应隐藏其 view,但仍保活、不销毁资源。 */
+  readonly visible: ReadableState<boolean>;
+  /** 主题,模块 chrome 跟随。 */
+  readonly theme: ReadableState<"light" | "dark">;
+  /** 当前是否已分离为独立窗口。 */
+  readonly detached: ReadableState<boolean>;
+  /** 把模块创建的 native view 挂到本区域;返回句柄,deactivate 自动摘除。
+   *  view 为不透明句柄(契约不耦合 Electron 类型);main 模块在主进程自行创建。
+   *  detach/merge 时框架把已 attach 的 view 整体 re-parent,模块无感。 */
+  attach(view: object): Disposable;
+  /** 请求把本 surface 分离到独立窗口(由框架建窗、re-parent;窗口仍归框架)。 */
+  detach(): Promise<void>;
+  /** 合并回主窗口。 */
+  merge(): Promise<void>;
 }
 
 export interface ViewDefinition {
@@ -241,17 +269,6 @@ export interface ViewDefinition {
 export interface MenuItemDefinition {
   label: string;
   onClick(): void;
-}
-
-/** 功能子系统示例 —— 注意它不是框架核心,只是某类 main module 的扩展能力面。 */
-export interface BrowserSubsystem {
-  open(url: string): Promise<{ pageId: string }>;
-  navigate(pageId: string, url: string): Promise<void>;
-  click(pageId: string, selector: string): Promise<void>;
-  type(pageId: string, selector: string, text: string): Promise<void>;
-  screenshot(pageId: string): Promise<string>; // base64
-  close(pageId: string): Promise<void>;
-  // 内部通过 webContents.debugger 发 CDP;页面/会话句柄由基座持有,不暴露给 module。
 }
 
 // ===========================================================================

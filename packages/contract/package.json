@@ -1,6 +1,6 @@
 {
   "name": "@boundary-desktop/contract",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "基座 ⇄ module 共同契约:类型 + 极少运行期辅助(单一事实来源)",
   "type": "module",
   "main": "./dist/index.js",
