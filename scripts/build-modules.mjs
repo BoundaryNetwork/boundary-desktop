@@ -1,10 +1,11 @@
 // 模块构建工具链:把 vendor 共享包(react / react-dom)与各模块构建成 app:// ESM 产物。
 // 自动发现 modules/*:有 src/index.tsx|ts 的走 esbuild 出 dist/index.mjs;
 // 纯 index.js 的零构建模块(无 src/)产物即源文件,跳过。
-// 模块以 react/react-dom 为 external,运行时经渲染页的 import map 指向 vendor —— 一份 React,
-// 多模块共享,模块产物不各自打包 React。
+// externals 按 manifest.runtime 分:renderer 模块 external react/react-dom(经渲染页 import map
+// 指向 vendor,一份 React 多模块共享);main 模块 external electron + node 内建(主进程直接 import,
+// 不打包宿主运行时)。
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -14,8 +15,8 @@ const shellDir = join(repo, "apps", "shell"); // vendor 是宿主(shell)的 app:
 const vendorDir = join(shellDir, "vendor");
 const modulesRoot = join(repo, "modules");
 
-// 模块对这些 bare specifier 的引用保持 external,交给 import map 解析到 vendor。
-const external = ["react", "react-dom", "react-dom/client"];
+// renderer 模块对这些 bare specifier 的引用保持 external,交给 import map 解析到 vendor。
+const rendererExternal = ["react", "react-dom", "react-dom/client"];
 
 // react CJS 的命名导出 esbuild 的 `export *` 检测不可靠,显式列出常用 hook/API。
 const REACT_NAMED = [
@@ -58,26 +59,32 @@ function sourceEntry(dir) {
   throw new Error(`模块 ${dir} 缺少 src/index.tsx|ts`);
 }
 
-/** 发现 modules/* 下含 manifest.json 的模块目录。 */
+/** 发现 modules/* 下含 manifest.json 的模块目录(读出 runtime 以决定 externals)。 */
 async function discoverModules() {
   const entries = await readdir(modulesRoot, { withFileTypes: true }).catch(() => []);
   const mods = [];
   for (const e of entries) {
     if (!e.isDirectory()) continue;
     const dir = join(modulesRoot, e.name);
-    if (!existsSync(join(dir, "manifest.json"))) continue;
-    mods.push({ id: e.name, dir });
+    const manifestPath = join(dir, "manifest.json");
+    if (!existsSync(manifestPath)) continue;
+    const { runtime } = JSON.parse(await readFile(manifestPath, "utf8"));
+    mods.push({ id: e.name, dir, runtime });
   }
   return mods;
 }
 
-async function buildModule(dir) {
+async function buildModule({ dir, runtime }) {
+  const main = runtime === "main";
   await build({
     entryPoints: [sourceEntry(dir)],
     bundle: true,
     format: "esm",
     outfile: join(dir, "dist", "index.mjs"),
-    external,
+    // main:主进程运行,external electron + 自动 external node 内建(platform node);
+    // renderer:external react,经 import map 指向 vendor。
+    platform: main ? "node" : "browser",
+    external: main ? ["electron"] : rendererExternal,
     jsx: "transform", // 经典 JSX:React.createElement,模块自带 import React
     logLevel: "warning",
   });
@@ -85,5 +92,5 @@ async function buildModule(dir) {
 
 await buildVendor();
 const mods = await discoverModules();
-for (const m of mods) await buildModule(m.dir);
+for (const m of mods) await buildModule(m);
 console.log(`[build:mods] vendor + 构建 [${mods.map((m) => m.id).join(", ")}]`);
