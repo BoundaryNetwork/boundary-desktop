@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.4.0",
   "scripts": {
+    "dev": "pnpm -F @boundary-desktop/shell dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "build:mods": "node scripts/build-modules.mjs",

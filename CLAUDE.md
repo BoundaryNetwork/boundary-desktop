@@ -22,6 +22,7 @@ boundary-desktop 项目级协作规则。**workspace 级通用规则**(git/PR/wo
 
 ```bash
 pnpm install        # 安装 + workspace 链接
+pnpm dev            # 起 Electron 壳(透传 shell dev;predev 自动备好 deps+vendor)
 pnpm build          # pnpm -r build,构建全部包
 pnpm typecheck      # 全包类型检查
 pnpm build:mods     # 模块工具链:构建 vendor.mjs + 自动发现各模块构建 dist(esbuild)
@@ -37,7 +38,7 @@ pnpm clean          # 清构建产物(dist/out/out-tsc/vendor/*.tsbuildinfo;不�
 pnpm -F @boundary-desktop/host test         # host 单测(vitest)
 pnpm -F @boundary-desktop/host build        # 单包构建
 pnpm -F @boundary-desktop/shell typecheck   # 壳层类型检查(node + web 两段)
-pnpm -F @boundary-desktop/shell dev         # 起 Electron 壳(GUI;无显示环境跑不了);predev 委派根 build:mods
+pnpm -F @boundary-desktop/shell dev         # 起 Electron 壳(GUI;无显示环境跑不了);predev 先 build:deps(contract/host)+ build:mods(vendor)。等价根 `pnpm dev`
 pnpm -F @boundary-desktop/shell build       # electron-vite build(main/preload/renderer 三段打包,不打包安装器);BUILD_ENV 缺省 local
 pnpm -F @boundary-desktop/shell build:staging  # 建依赖包 + vendor,再烘焙 BUILD_ENV=staging
 pnpm -F @boundary-desktop/shell build:prod     # 同上,烘焙 BUILD_ENV=prod
@@ -49,7 +50,7 @@ pnpm -F @boundary-desktop/shell dist:prod:unsigned
 
 分环境构建:`BUILD_ENV` 经 electron-vite define 烘焙进主进程(`__BUILD_ENV__` → `env.ts` 的 `baked`),决定默认 active env —— staging/prod 各自走 RemoteSource、从 `module-envs.json` 对应 base 拉 catalog。运行时 `BOUNDARY_ENV` 可覆盖烘焙值。
 
-`build:staging`/`build:prod` 起手先 `pnpm --filter '@boundary-desktop/shell^...' build` 构建 contract/host 的 `dist`(main bundle 要 resolve 它们的入口)—— 所以 **`pnpm clean` 之后直接打包也成立**(clean 删了 `packages/*/dist`,不先建会报 "Failed to resolve entry for @boundary-desktop/host")。
+`predev` / `build:staging` / `build:prod` 起手都跑 `build:deps`(= `pnpm --filter '@boundary-desktop/shell^...' build`,构建 contract/host 的 `dist`,main bundle 要 resolve 它们的入口)—— 所以 **`pnpm clean` 之后直接 `pnpm dev` / 打包都成立**(clean 删了 `packages/*/dist`,不先建会报 "Failed to resolve entry for @boundary-desktop/host")。
 
 安装器打包(`dist:*`,electron-builder,配置 `apps/shell/electron-builder.yml`):
 - 3 个目标产物:**win x64(nsis)**、**mac x64(dmg)**、**mac arm64(dmg)**。产物落 `apps/shell/dist`(gitignore)
