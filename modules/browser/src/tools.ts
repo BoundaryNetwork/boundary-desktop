@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@boundary-desktop/contract";
 import type { WebContents } from "electron";
+import { click, findElement, interceptNext, setInputFiles, typeText } from "./automation.js";
 
 interface ToolDeps {
   /** 当前活动标签的 webContents(无则 null)。 */
@@ -16,6 +17,10 @@ const str = (a: unknown, k: string): string | undefined => {
 const num = (a: unknown, k: string): number | undefined => {
   const v = rec(a)[k];
   return typeof v === "number" ? v : undefined;
+};
+const strArr = (a: unknown, k: string): string[] => {
+  const v = rec(a)[k];
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 };
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -117,6 +122,67 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
           if (Date.now() >= deadline) throw new Error(`等待元素超时: ${sel}`);
           await sleep(200);
         }
+      },
+    },
+    // --- CDP 系(经 webContents.debugger 合成可信输入) ---
+    {
+      name: "click",
+      description: "点击元素(selector 或 text 匹配,CDP 合成可信点击)",
+      schema: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } } },
+      handler: async (a) => {
+        const c = await findElement(wc(), { selector: str(a, "selector"), text: str(a, "text") });
+        await click(wc(), c.x, c.y);
+        return { ok: true };
+      },
+    },
+    {
+      name: "type",
+      description: "在元素中输入文字(text_to_find/selector 定位并聚焦后人性化输入 text)",
+      schema: {
+        type: "object",
+        required: ["text"],
+        properties: { selector: { type: "string" }, text: { type: "string" }, text_to_find: { type: "string" } },
+      },
+      handler: async (a) => {
+        const text = str(a, "text");
+        if (text == null) throw new Error("type 需要 text");
+        const sel = str(a, "selector");
+        const find = str(a, "text_to_find");
+        if (sel || find) {
+          const c = await findElement(wc(), { selector: sel, text: find });
+          await click(wc(), c.x, c.y); // 聚焦
+        }
+        await typeText(wc(), text);
+        return { ok: true };
+      },
+    },
+    {
+      name: "upload",
+      description: "把文件注入文件输入框(selector 指向 input[type=file])",
+      schema: {
+        type: "object",
+        required: ["selector", "filePaths"],
+        properties: { selector: { type: "string" }, filePaths: { type: "array", items: { type: "string" } } },
+      },
+      handler: async (a) => {
+        const sel = str(a, "selector");
+        if (!sel) throw new Error("upload 需要 selector");
+        await setInputFiles(wc(), sel, strArr(a, "filePaths"));
+        return { ok: true };
+      },
+    },
+    {
+      name: "intercept_next",
+      description: "等待并拦截下一个匹配 urlPattern(支持 * 通配)的 HTTP 响应,返回 body/headers/status",
+      schema: {
+        type: "object",
+        required: ["urlPattern"],
+        properties: { urlPattern: { type: "string" }, timeout: { type: "number" } },
+      },
+      handler: async (a) => {
+        const pat = str(a, "urlPattern");
+        if (!pat) throw new Error("intercept_next 需要 urlPattern");
+        return interceptNext(wc(), pat, num(a, "timeout") ?? 30000);
       },
     },
   ];
