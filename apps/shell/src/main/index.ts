@@ -20,8 +20,10 @@ const bridge = new RendererBridge();
 const { env: activeEnv, source } = createModuleSource();
 console.log(`[shell] 环境:${activeEnv}`);
 
-// 共享依赖(react/react-dom)产物目录,经 app://vendor 提供给渲染页 import map
-setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(process.cwd(), "vendor"));
+// 共享依赖(react/react-dom)产物目录,经 app://vendor 提供给渲染页 import map。
+// 相对 import.meta.dirname(out/main)解析:dev → apps/shell/vendor,打包 → app(.asar)/vendor;
+// 不能用 process.cwd()——打包后 cwd 非 app 目录。
+setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(import.meta.dirname, "..", "..", "vendor"));
 
 const registry = new Registry({
   source,

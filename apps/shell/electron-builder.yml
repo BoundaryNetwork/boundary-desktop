@@ -1,0 +1,39 @@
+appId: com.boundary.desktop
+productName: Boundary Desktop
+
+# 图标/签名材料在仓库根 build/(本 app 目录无 build/,显式指过去)
+directories:
+  buildResources: ../../build
+  output: dist
+
+# main 已 bundle 自包含(见 electron.vite.config.ts),运行期只需产物 + vendor;不带 node_modules
+files:
+  - out/**
+  - vendor/**
+  - package.json
+# vendor 经 app:// 用 net.fetch(file://) 读,解包到 asar 外避免 asar 内流式读取问题
+asarUnpack:
+  - vendor/**
+
+mac:
+  category: public.app-category.productivity
+  icon: ../../build/icon.icns
+  entitlements: ../../build/entitlements.mac.plist
+  entitlementsInherit: ../../build/entitlements.mac.inherit.plist
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+win:
+  icon: ../../build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

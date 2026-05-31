@@ -1,0 +1,6 @@
+# 不签名打包配置:继承主配置,仅把 mac 签名身份置 null(确定性跳过 codesign;
+# CSC_IDENTITY_AUTO_DISCOVERY=false 在有本机证书时拦不住,故显式 identity: null)。
+# win nsis 本就不签(无证书)。供 CI 无证书 / 本地快速验证用。
+extends: ./electron-builder.yml
+mac:
+  identity: null

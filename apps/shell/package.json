@@ -2,6 +2,7 @@
   "name": "@boundary-desktop/shell",
   "version": "0.1.0",
   "description": "基座壳:Electron 主进程 + React 渲染壳",
+  "author": "Boundary Desktop",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -9,23 +10,28 @@
     "predev": "pnpm -w build:mods",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:staging": "pnpm --filter '@boundary-desktop/shell^...' build && pnpm -w build:mods && BUILD_ENV=staging electron-vite build",
+    "build:prod": "pnpm --filter '@boundary-desktop/shell^...' build && pnpm -w build:mods && BUILD_ENV=prod electron-vite build",
+    "dist:staging": "pnpm run build:staging && electron-builder --mac --win",
+    "dist:prod": "pnpm run build:prod && electron-builder --mac --win",
+    "dist:staging:unsigned": "pnpm run build:staging && electron-builder --config electron-builder.unsigned.yml --mac --win",
+    "dist:prod:unsigned": "pnpm run build:prod && electron-builder --config electron-builder.unsigned.yml --mac --win",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@boundary-desktop/contract": "workspace:*",
     "@boundary-desktop/host": "workspace:*",
     "@boundary-desktop/ui": "workspace:*",
-    "lucide-react": "1.14.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "lucide-react": "1.14.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^6.0.3",
     "vite": "^5.4.11"
   }

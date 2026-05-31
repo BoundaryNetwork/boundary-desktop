@@ -40,6 +40,16 @@ pnpm build:mods                    # 自动发现并构建各模块产物 + vend
 pnpm pack:mods <staging|prod>      # 发布：算 integrity + 生成 catalog.json → out/publish/<env>
 
 pnpm clean                         # 清构建产物（dist/out/out-tsc/vendor/*.tsbuildinfo，不动 node_modules）
+
+# 分环境构建壳（BUILD_ENV 烘焙进主进程，决定默认 active env；BOUNDARY_ENV 运行时可覆盖）
+pnpm -F @boundary-desktop/shell build:staging  # 拉 cdn-staging 的 catalog
+pnpm -F @boundary-desktop/shell build:prod     # 拉 cdn 的 catalog
+
+# 安装器打包（electron-builder → win x64 nsis + mac x64/arm64 dmg；win 在 mac 上需 wine，一般交 CI）
+pnpm -F @boundary-desktop/shell dist:staging           # 签名（若本机有证书）
+pnpm -F @boundary-desktop/shell dist:prod
+pnpm -F @boundary-desktop/shell dist:staging:unsigned  # 跳过签名
+pnpm -F @boundary-desktop/shell dist:prod:unsigned
 ```
 
 ## 核心约束

@@ -38,8 +38,26 @@ pnpm -F @boundary-desktop/host test         # host 单测(vitest)
 pnpm -F @boundary-desktop/host build        # 单包构建
 pnpm -F @boundary-desktop/shell typecheck   # 壳层类型检查(node + web 两段)
 pnpm -F @boundary-desktop/shell dev         # 起 Electron 壳(GUI;无显示环境跑不了);predev 委派根 build:mods
-pnpm -F @boundary-desktop/shell build       # electron-vite build(main/preload/renderer 三段打包,不打包安装器)
+pnpm -F @boundary-desktop/shell build       # electron-vite build(main/preload/renderer 三段打包,不打包安装器);BUILD_ENV 缺省 local
+pnpm -F @boundary-desktop/shell build:staging  # 建依赖包 + vendor,再烘焙 BUILD_ENV=staging
+pnpm -F @boundary-desktop/shell build:prod     # 同上,烘焙 BUILD_ENV=prod
+pnpm -F @boundary-desktop/shell dist:staging          # build:staging 后 electron-builder 出安装包(签名,若有证书)
+pnpm -F @boundary-desktop/shell dist:prod
+pnpm -F @boundary-desktop/shell dist:staging:unsigned # 同上但跳过签名(CSC_IDENTITY_AUTO_DISCOVERY=false)
+pnpm -F @boundary-desktop/shell dist:prod:unsigned
 ```
+
+分环境构建:`BUILD_ENV` 经 electron-vite define 烘焙进主进程(`__BUILD_ENV__` → `env.ts` 的 `baked`),决定默认 active env —— staging/prod 各自走 RemoteSource、从 `module-envs.json` 对应 base 拉 catalog。运行时 `BOUNDARY_ENV` 可覆盖烘焙值。
+
+`build:staging`/`build:prod` 起手先 `pnpm --filter '@boundary-desktop/shell^...' build` 构建 contract/host 的 `dist`(main bundle 要 resolve 它们的入口)—— 所以 **`pnpm clean` 之后直接打包也成立**(clean 删了 `packages/*/dist`,不先建会报 "Failed to resolve entry for @boundary-desktop/host")。
+
+安装器打包(`dist:*`,electron-builder,配置 `apps/shell/electron-builder.yml`):
+- 3 个目标产物:**win x64(nsis)**、**mac x64(dmg)**、**mac arm64(dmg)**。产物落 `apps/shell/dist`(gitignore)
+- 全依赖在 `devDependencies`、main 全程 bundle 自包含(见 `electron.vite.config.ts`),运行期无 node_modules → electron-builder 不收 production 依赖(否则会顺 pnpm 软链去打 `packages/*` 报"must be under apps/shell")
+- vendor 经 `files: vendor/**` 进包、`asarUnpack` 解到 asar 外(app:// 用 `net.fetch(file://)` 读);`vendorDir` 用 `import.meta.dirname` 相对(打包后 cwd 非 app 目录)
+- 图标/entitlements 在仓库根 `build/`(`directories.buildResources: ../../build`)
+- **签名**:默认 `dist:*` 会自动发现本机证书签名;`dist:*:unsigned` 用 `CSC_IDENTITY_AUTO_DISCOVERY=false` 出未签名产物(CI 无证书或本地快速验证用)
+- **win nsis 在 macOS 上构建需 wine;跨平台产物一般交 CI 各自原生 runner**
 
 测试节奏:先 `pnpm -F <改动包> test/typecheck`,再 `pnpm -r typecheck`,然后再交付。壳层运行时行为(跨进程加载、app://、import map)只能 `pnpm dev` 人工验证。
 
