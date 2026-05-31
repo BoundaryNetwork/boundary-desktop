@@ -1,8 +1,9 @@
 // main-runtime 浏览器模块:能力(标签/导航)自包含在模块内。框架只给一块右侧区域(surface),
 // 模块在区域内自排版:顶部 chrome 条(自带 toolbar 渲染页)+ 下方内容区(每标签一个内容视图)。
 // Phase 2b:多标签(TabStore + TabViewHost)+ 标签条 + 地址栏导航。CDP/工具/自动化留后续。
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type WebContents, WebContentsView, ipcMain } from "electron";
+import { app, type WebContents, WebContentsView, ipcMain } from "electron";
 import { defineModule, type Disposable, type MainContext, type Rect } from "@boundary-desktop/contract";
 import { CH, type ChromeState, type TabMeta } from "./ipc.js";
 import { TabStore } from "./tab-store.js";
@@ -68,7 +69,8 @@ export default defineModule<MainContext>({
     }
     // automation.* 工具:内置 DSL 脚本(随包到 dist/scripts)+ 串行 runner。
     const scriptsDir = fileURLToPath(new URL("./scripts/", import.meta.url));
-    runner = new Runner();
+    // 运行产物落模块自有 userData 目录(session capture,跨会话可读)。
+    runner = new Runner(join(app.getPath("userData"), "boundary-browser", "runs"));
     for (const def of automationTools({ scriptsDir, active: () => active(), runner })) {
       ctx.registerTool(def);
     }

@@ -22,6 +22,7 @@ function summary(r: RunRecord): object {
     step: r.step,
     total: r.total,
     outputKeys: r.output ? Object.keys(r.output) : [],
+    outputFile: r.outputFile,
     message: r.message,
   };
 }
@@ -72,7 +73,9 @@ export function automationTools(deps: Deps): ToolDefinition[] {
           done.then(() => "done" as const),
           new Promise<"timeout">((r) => setTimeout(() => r("timeout"), SYNC_WINDOW)),
         ]);
-        return raced === "done" ? { ...summary(record), output: record.output } : summary(record);
+        return raced === "done"
+          ? { ...summary(record), output: record.output, dataDir: deps.runner.dataDir() }
+          : { ...summary(record), dataDir: deps.runner.dataDir() };
       },
     },
     {
@@ -87,7 +90,7 @@ export function automationTools(deps: Deps): ToolDefinition[] {
       schema: { type: "object", required: ["runId"], properties: { runId: { type: "string" } } },
       handler: async (a) => {
         const r = requireRun(a);
-        return { ...summary(r), output: r.output ?? null };
+        return { ...summary(r), output: r.output ?? null, dataDir: deps.runner.dataDir() };
       },
     },
     {

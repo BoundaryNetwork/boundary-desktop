@@ -41,6 +41,8 @@ export interface RunRecord {
   step?: number;
   total?: number;
   output?: Record<string, unknown>;
+  /** 运行产物落盘路径(session capture);完成时写,跨会话可读。 */
+  outputFile?: string;
   errorCode?: string;
   message?: string;
 }
