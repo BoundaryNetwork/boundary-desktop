@@ -12,7 +12,7 @@ import { browserTools } from "./tools.js";
 import { automationTools } from "./automation-tools.js";
 import { Runner } from "./runner.js";
 
-const TOOLBAR_H = 84; // chrome 条高度(标签条 + 地址栏两行)
+const TOOLBAR_H = 88; // chrome 条高度(tab 条 40 + 导航栏 48,与 openclaw #toolbar 对齐)
 const START_PAGE =
   "data:text/html," +
   encodeURIComponent(
