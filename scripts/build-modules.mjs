@@ -5,7 +5,7 @@
 // 指向 vendor,一份 React 多模块共享);main 模块 external electron + node 内建(主进程直接 import,
 // 不打包宿主运行时)。
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -88,6 +88,35 @@ async function buildModule({ dir, runtime }) {
     jsx: "transform", // 经典 JSX:React.createElement,模块自带 import React
     logLevel: "warning",
   });
+  // 模块自带 chrome 页(main 模块的 renderer 资产,载入自己的 WebContentsView):多入口,
+  // 页面 bundle external react(经 app:// + import map 指向 vendor),preload external electron。
+  if (existsSync(join(dir, "src", "chrome", "main.tsx"))) await buildChromePage(dir);
+}
+
+async function buildChromePage(dir) {
+  const chromeSrc = join(dir, "src", "chrome");
+  const outDir = join(dir, "dist", "chrome");
+  await build({
+    entryPoints: [join(chromeSrc, "main.tsx")],
+    bundle: true,
+    format: "esm",
+    outfile: join(outDir, "main.mjs"),
+    platform: "browser",
+    external: rendererExternal, // react 经页面 import map → vendor
+    jsx: "transform",
+    logLevel: "warning",
+  });
+  await build({
+    entryPoints: [join(chromeSrc, "preload.ts")],
+    bundle: true,
+    format: "esm",
+    outfile: join(outDir, "preload.mjs"),
+    platform: "node",
+    external: ["electron"], // preload 在渲染进程的特权上下文,直接用 electron
+    logLevel: "warning",
+  });
+  await mkdir(outDir, { recursive: true });
+  await copyFile(join(chromeSrc, "index.html"), join(outDir, "index.html")); // 带 import map 的页面壳
 }
 
 await buildVendor();
