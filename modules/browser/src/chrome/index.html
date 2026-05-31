@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>浏览器</title>
+    <!-- react/react-dom 经 import map 指向宿主共享 vendor(一份 React,与壳及各模块共用) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "app://vendor/vendor.mjs",
+          "react-dom/client": "app://vendor/vendor.mjs"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="./main.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

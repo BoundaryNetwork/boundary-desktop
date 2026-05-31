@@ -68,10 +68,28 @@ importers:
       '@boundary-desktop/contract':
         specifier: workspace:*
         version: link:../../packages/contract
+      '@boundary-desktop/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.29
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.29)
       electron:
         specifier: ^38.0.0
         version: 38.8.6
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
