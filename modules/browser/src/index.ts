@@ -7,6 +7,7 @@ import { defineModule, type Disposable, type MainContext, type Rect } from "@bou
 import { CH, type ChromeState, type TabMeta } from "./ipc.js";
 import { TabStore } from "./tab-store.js";
 import { TabViewHost } from "./tab-view-host.js";
+import { browserTools } from "./tools.js";
 
 const TOOLBAR_H = 84; // chrome 条高度(标签条 + 地址栏两行)
 const START_PAGE =
@@ -57,6 +58,11 @@ export default defineModule<MainContext>({
       onNav: (id, patch) => store!.update(id, patch),
     });
     store.open(""); // 初始一个新标签页
+
+    // 对外能力:注册 browser.* 工具(自动加前缀,经 WS/MCP/CLI 门面暴露;句柄由 ctx 自动回收)。
+    for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url) })) {
+      ctx.registerTool(def);
+    }
 
     // 区域/前台/主题变化 → 模块自排版与自显隐(框架只发状态)。
     relayout();
