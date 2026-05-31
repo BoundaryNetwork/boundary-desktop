@@ -13,7 +13,7 @@ boundary-desktop 项目级协作规则。**workspace 级通用规则**(git/PR/wo
 ## 技术栈
 
 - pnpm 11.4.0 workspace;Node 22;TypeScript 6,NodeNext ESM(全仓 `"type": "module"`)
-- 测试 vitest 4;壳层 Electron 33 + electron-vite 2 + Vite 5 + React 18 + esbuild
+- 测试 vitest 4;壳层 Electron 38 + electron-vite 2 + Vite 5 + React 18 + esbuild
 - 包管理只用 pnpm,不用 npm/yarn
 
 ## 命令
@@ -65,7 +65,7 @@ pnpm -F @boundary-desktop/shell dist:prod:unsigned
 ## 目录映射
 
 - `packages/contract` —— `@boundary-desktop/contract`。契约单一事实来源:manifest / 生命周期 / 三层 ctx / tool 契约 + `defineModule` + `HOST_API_VERSION`。基座与所有模块共同依赖,改这里即改契约,谨慎。
-- `packages/host` —— `@boundary-desktop/host`。基座实现:Registry / Reconciler / 模块来源(LocalDirSource、RemoteSource)/ capabilities / WS 门面。持有全部有状态资源。
+- `packages/host` —— `@boundary-desktop/host`。基座实现:Registry / Reconciler / 模块来源(LocalDirSource、RemoteSource)/ capabilities / WS 门面。持有共享/框架状态(登录态、注册表、窗口、共享连接);不含任何功能子系统代码。
 - `packages/ui` —— `@boundary-desktop/ui`。**样式契约包**(纯 CSS):`tokens.css`(token)+ `design-system.css`(`bd-*`)+ 聚合 `styles.css`。与 contract 平级——发布契约不归属任何具体宿主。
 - `apps/shell` —— `@boundary-desktop/shell`。Electron 壳:
   - `src/main` —— 主进程。装配 HostServices + Registry + RendererBridge,注册 IPC、app:// scheme、env profile、auth driver、createWindow
@@ -83,10 +83,16 @@ pnpm -F @boundary-desktop/shell dist:prod:unsigned
 
 README「核心约束」是底线,改动前回读。要点:
 
-- 基座是状态的唯一持有者;模块无状态或状态外置(热拔不留痕、插回行为一致)
+- 基座持有共享/框架状态(登录态/注册表/窗口/共享连接);模块可持有自己的私有功能子系统(如浏览器模块的 view 句柄/CDP/automation),对外能力一律经 `ctx.registerTool` 暴露、框架只把分配的 UI 区域交给它,deactivate 时彻底回收(热拔不留痕、插回一致)
 - `ctx` 是基座与模块唯一合法接触面;能力归三范式(只读+订阅 / 代理动作 / 注册类自动回收)+ storage 特例,按 runtime 单维度裁剪
 - tool 注册自动加 `<module.id>.` 前缀,跨模块冲突结构性不可能
 - 对外协议(WS/MCP/CLI)是门面,接在 list/invoke/version 三件套上,不进核心契约;若新能力迫使核心契约反向依赖某门面/功能域,是边界划错,重做边界而非补依赖
+
+### 功能子系统硬约束(浏览器一类的重模块,违反即架构错)
+
+1. **能力只经 tool 暴露,零代码耦合**:子系统对外能力一律走 `ctx.registerTool`;框架(`packages/host`/`apps/shell`)**不 import 子系统任何代码**,子系统也**不往核心契约加自己的领域类型/能力面**。契约只允许加**通用**能力(如 `MainContext.surface`),不允许加 `BrowserSubsystem` 这类功能专属面。
+2. **UI 区域由框架给,子系统铺满右侧 100%**:框架左右布局,把右侧 content 区(100%)经 `surface` 交给子系统;子系统在区域内自由组合(toolbar/tab/菜单等是其内部内容,框架不感知)。子系统不自己开窗口(detach 也走框架的可分离 surface)。
+3. **样式遵从框架**:子系统 UI 的风格、设计 token、组件类一律用 `@boundary-desktop/ui`(token + `bd-*`),不自带视觉体系;主题跟随框架下发。
 
 ## 壳层运行时结构事实(Phase 5,改壳必读)
 
