@@ -1,0 +1,325 @@
+{
+  "id": "douyin-fxg-homepage",
+  "platform": "douyin",
+  "name": "抖店 · 经营看板",
+  "description": "监听抖店首页经营数据接口，提取多时间粒度指标",
+  "startUrl": "https://fxg.jinritemai.com/ffa/mshop/homepage/index?channel=zhaoshang",
+  "contextSetup": {
+    "isTargetReal": {
+      "type": "derived",
+      "source": "metricPeriodValue",
+      "op": "==",
+      "value": "Real"
+    },
+    "isTargetDay": {
+      "type": "derived",
+      "source": "metricPeriodValue",
+      "op": "==",
+      "value": "Day"
+    },
+    "isTargetWeek": {
+      "type": "derived",
+      "source": "metricPeriodValue",
+      "op": "==",
+      "value": "Week"
+    },
+    "isTargetMonth": {
+      "type": "derived",
+      "source": "metricPeriodValue",
+      "op": "==",
+      "value": "Month"
+    },
+    "notTargetReal": {
+      "type": "derived",
+      "source": "metricPeriodValue",
+      "op": "!==",
+      "value": "Real"
+    }
+  },
+  "variables": [
+    {
+      "key": "pageUrl",
+      "label": "抖店首页地址",
+      "type": "text",
+      "default": "https://fxg.jinritemai.com/ffa/mshop/homepage/index?channel=zhaoshang"
+    },
+    {
+      "key": "metricPeriodValue",
+      "label": "时间粒度",
+      "type": "select",
+      "default": "Real",
+      "options": [
+        { "value": "Real", "label": "实时" },
+        { "value": "Day", "label": "近1天" },
+        { "value": "Week", "label": "近7天" },
+        { "value": "Month", "label": "近30天" }
+      ]
+    }
+  ],
+  "outputSchema": {
+    "filename": {
+      "prefix": "douyin_fxg_homepage"
+    },
+    "csv": [
+      {
+        "type": "metric",
+        "source": "execute_fxgMetrics",
+        "rowsFrom": "metrics",
+        "columns": [
+          { "name": "field", "from": "field" },
+          { "name": "value", "from": "value" },
+          { "name": "yoy", "from": "yoy" },
+          { "name": "yoyDirection", "from": "yoyDirection" },
+          { "name": "benchmarkLabel", "from": "benchmarkLabel" },
+          { "name": "benchmarkValue", "from": "benchmarkValue" }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "captureStart",
+      "description": "开启经营数据接口监听",
+      "action": "sessionCapture",
+      "params": {
+        "sessionList": [
+          {
+            "sessionKey": "fxgHomepageApi",
+            "urlIncludes": ["/pc/api/home/homepage"],
+            "valueKey": [{ "name": "raw", "path": "" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "refreshPage",
+      "description": "刷新页面确保监听覆盖所有请求（先挂监听再刷新，规避竞态）",
+      "action": "reload",
+      "timeout": 30000
+    },
+    {
+      "id": "settleAfterNav",
+      "description": "等待页面渲染就绪",
+      "action": "wait",
+      "duration": [800, 1200]
+    },
+    {
+      "id": "assertLoggedIn",
+      "description": "校验已登录抖店后台",
+      "action": "assertPageState",
+      "timeout": 8000,
+      "params": {
+        "failWhen": [
+          { "type": "url", "includes": "sso.jinritemai.com" },
+          { "type": "url", "includes": "/login" },
+          { "type": "url", "includes": "/passport" }
+        ],
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessage": "抖店后台未登录，请在浏览器中先完成登录再重试"
+      }
+    },
+    {
+      "id": "assertPageReady",
+      "description": "校验首页经营看板已加载",
+      "action": "assertPageState",
+      "timeout": 45000,
+      "params": {
+        "failWhen": [
+          { "type": "exist", "selector": ".auxo-spin, .ant-spin, .arco-spin" },
+          { "type": "text", "value": "页面加载中" }
+        ],
+        "errorCode": "PAGE_NOT_READY",
+        "errorMessage": "抖店首页看板加载超时"
+      }
+    },
+    {
+      "id": "detectInputMode",
+      "description": "检测当前页面使用 radio 还是 dropdown 选择器",
+      "action": "execute",
+      "params": {
+        "saveAs": "inputMode",
+        "fn": "(function(){var r=document.querySelector('label:has(input[type=\"radio\"])');return r?'radio':'dropdown'})"
+      }
+    },
+    {
+      "id": "switchPrep_radio",
+      "description": "切换前先点击其他粒度（radio 模式，目标非实时）",
+      "action": "click",
+      "when": "notTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "label:has(input[type='radio'][value='Real'])"
+      }
+    },
+    {
+      "id": "switchPrep_radio_real",
+      "description": "当前目标为实时时先点击近1天（radio 模式）",
+      "action": "click",
+      "when": "isTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "label:has(input[type='radio'][value='Day'])"
+      }
+    },
+    {
+      "id": "switchPrep_dropdown_trigger",
+      "description": "点击时间粒度下拉框触发（dropdown 模式，目标非实时）",
+      "action": "click",
+      "when": "notTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-selector'], div.auxo-select, div[class*='auxo-select']"
+      }
+    },
+    {
+      "id": "switchPrep_dropdown_trigger_real",
+      "description": "点击时间粒度下拉框触发（dropdown 模式，目标为实时）",
+      "action": "click",
+      "when": "isTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-selector'], div.auxo-select, div[class*='auxo-select']"
+      }
+    },
+    {
+      "id": "waitDropdownOpen_prep",
+      "description": "等待下拉菜单展开",
+      "action": "waitForSelector",
+      "timeout": 5000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div.auxo-select-dropdown:not(.auxo-select-dropdown-hidden), div[class*='auxo-select-dropdown']:not([class*='hidden'])"
+      }
+    },
+    {
+      "id": "switchPrep_dropdown_option_real",
+      "description": "在下拉中选择「实时」",
+      "action": "click",
+      "when": "notTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "实时"
+      }
+    },
+    {
+      "id": "switchPrep_dropdown_option_day",
+      "description": "在下拉中选择「近1天」",
+      "action": "click",
+      "when": "isTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "近1天"
+      }
+    },
+    {
+      "id": "settleAfterPrep",
+      "description": "等待前置切换触发接口请求",
+      "action": "wait",
+      "duration": [1000, 1500]
+    },
+    {
+      "id": "switchTarget_radio",
+      "description": "点击目标时间粒度（radio 模式）",
+      "action": "click",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "label:has(input[type='radio'][value='{{metricPeriodValue}}'])"
+      }
+    },
+    {
+      "id": "switchTarget_dropdown_trigger",
+      "description": "点击时间粒度下拉框",
+      "action": "click",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-selector'], div.auxo-select, div[class*='auxo-select']"
+      }
+    },
+    {
+      "id": "waitDropdownOpen_target",
+      "description": "等待下拉菜单展开",
+      "action": "waitForSelector",
+      "timeout": 5000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div.auxo-select-dropdown:not(.auxo-select-dropdown-hidden), div[class*='auxo-select-dropdown']:not([class*='hidden'])"
+      }
+    },
+    {
+      "id": "switchTarget_dropdown_option_real",
+      "description": "选择「实时」",
+      "action": "click",
+      "when": "isTargetReal",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "实时"
+      }
+    },
+    {
+      "id": "switchTarget_dropdown_option_day",
+      "description": "选择「近1天」",
+      "action": "click",
+      "when": "isTargetDay",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "近1天"
+      }
+    },
+    {
+      "id": "switchTarget_dropdown_option_week",
+      "description": "选择「近7天」",
+      "action": "click",
+      "when": "isTargetWeek",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "近7天"
+      }
+    },
+    {
+      "id": "switchTarget_dropdown_option_month",
+      "description": "选择「近30天」",
+      "action": "click",
+      "when": "isTargetMonth",
+      "timeout": 4000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "div[class*='auxo-select-dropdown']:not([class*='auxo-select-dropdown-hidden']) div[class*='auxo-select-item-option-content']",
+        "text": "近30天"
+      }
+    },
+    {
+      "id": "settleAfterTarget",
+      "description": "等待目标粒度接口返回数据",
+      "action": "wait",
+      "duration": [1500, 2000]
+    },
+    {
+      "id": "extractMetrics",
+      "description": "从响应中提取经营指标数据",
+      "action": "transform",
+      "params": {
+        "input": {
+          "sessionKey": "fxgHomepageApi"
+        },
+        "saveAs": "fxgMetrics",
+        "fn": "(function(input, context){\nvar responses=Array.isArray(input)?input.map(function(r){return r&&r.raw}).filter(Boolean):((input&&input.rawResponses)||[]);\nvar targetValue=context.metricPeriodValue||'Real';\nfunction toNullableString(v){return typeof v==='string'&&v.trim()? v.trim():null}\nfunction mapYoYDirection(iconType){var t=String(iconType);if(t==='17')return'up';if(t==='18')return'down';return null}\nfunction normalizeEntry(entry){if(!entry||typeof entry!=='object')return null\nreturn{key:toNullableString(entry.key)||'',field:toNullableString(entry.title)||'',value:toNullableString(entry.val),yoy:toNullableString(entry.sub_val),yoyDirection:mapYoYDirection(entry.icon_type),benchmarkLabel:toNullableString(entry.peer_data&&entry.peer_data.title),benchmarkValue:toNullableString(entry.peer_data&&entry.peer_data.val)}}\nfunction mapMetrics(arr){if(!Array.isArray(arr))return[]\nreturn arr.map(function(e){return normalizeEntry(e)}).filter(function(e){return e&&e.field})}\nfunction resolvePeriodLabel(v){switch(v){case'Real':return'实时';case'Day':return'近1天';case'Week':return'近7天';case'Month':return'近30天';default:return null}}\nfor(var i=responses.length-1;i>=0;i--){var body=responses[i];if(!body||typeof body!=='object')continue\nvar layoutData=Array.isArray(body.data&&body.data.lay_out_data)?body.data.lay_out_data:[]\nfor(var li=0;li<layoutData.length;li++){var cards=Array.isArray(layoutData[li]&&layoutData[li].cards)?layoutData[li].cards:[]\nfor(var ci=0;ci<cards.length;ci++){var card=cards[ci];if(!card||typeof card!=='object')continue;var cn=String(card.card_name||'');if(cn.indexOf('operating_data_card')!==0)continue;var payload=card.data&&card.data[cn+'_data']\nif(payload&&typeof payload==='object'&&Array.isArray(payload.compass_list)){var rank=payload.rank_list&&typeof payload.rank_list==='object'?{title:toNullableString(payload.rank_list.title),value:toNullableString(payload.rank_list.val),yoy:toNullableString(payload.rank_list.sub_val),yoyDirection:mapYoYDirection(payload.rank_list.icon_type)}:null\nreturn{extractedAt:new Date().toISOString(),periodValue:targetValue,periodLabel:resolvePeriodLabel(targetValue),title:toNullableString(payload.title),subTitle:toNullableString(payload.sub_title),rank:rank,metrics:mapMetrics(payload.compass_list)}}}}}\nreturn null})"
+      }
+    }
+  ]
+}

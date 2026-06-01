@@ -1,0 +1,121 @@
+{
+  "id": "kuaishou",
+  "platform": "kuaishou",
+  "name": "快手 · 发布短视频",
+  "taskName": "kuaishou_publish_video",
+  "startUrl": "https://cp.kuaishou.com/article/publish/video",
+  "humanize": {
+    "mouseSpeed": "normal",
+    "typingSpeed": "normal",
+    "mistakeRate": 0.03,
+    "extraPauseRate": 0.1
+  },
+  "variables": [
+    {
+      "key": "title",
+      "label": "作品标题（写入描述第一行）",
+      "type": "text",
+      "placeholder": "吸引粉丝的标题"
+    },
+    {
+      "key": "desc",
+      "label": "作品描述（标题之后，含话题最多 500 字）",
+      "type": "textarea",
+      "placeholder": "介绍你的作品…"
+    },
+    {
+      "key": "video",
+      "label": "图片 / 视频",
+      "type": "files",
+      "accept": "image/*,video/*"
+    },
+    {
+      "key": "tags",
+      "label": "话题标签（最多 4 个）",
+      "type": "text",
+      "placeholder": "#话题1 #话题2"
+    }
+  ],
+  "steps": [
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".upload-area, [class*='upload']", "text": "上传视频" },
+      "timeout": 12000,
+      "description": "等待上传区域"
+    },
+    {
+      "action": "upload",
+      "inputSelector": "input[type=file]",
+      "value": "{{video}}",
+      "description": "上传视频文件"
+    },
+    {
+      "action": "wait",
+      "duration": [5000, 5000],
+      "description": "等待上传开始（近似 graceMs 5000）"
+    },
+    {
+      "action": "waitForElement",
+      "target": {
+        "selector": "textarea[placeholder*='作品描述'], input[placeholder*='作品描述'], div[contenteditable='true']"
+      },
+      "timeout": 120000,
+      "description": "等待视频上传完成（轮询描述编辑区出现）"
+    },
+    {
+      "action": "click",
+      "target": {
+        "selector": "textarea[placeholder*='作品描述'], input[placeholder*='作品描述'], div[contenteditable='true']"
+      },
+      "description": "点击作品描述"
+    },
+    {
+      "action": "type",
+      "target": {
+        "selector": "textarea[placeholder*='作品描述'], input[placeholder*='作品描述'], div[contenteditable='true']"
+      },
+      "value": "{{title}}\n{{desc}}",
+      "description": "输入标题与描述（标题为第一行）"
+    },
+    {
+      "action": "wait",
+      "duration": [800, 1500]
+    },
+    {
+      "action": "type",
+      "target": {
+        "selector": "textarea[placeholder*='作品描述'], input[placeholder*='作品描述'], div[contenteditable='true']"
+      },
+      "value": " {{tags}}",
+      "noClick": true,
+      "tagMode": true,
+      "maxTags": 4,
+      "description": "输入话题标签"
+    },
+    {
+      "action": "wait",
+      "duration": [400, 800]
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": "button", "text": "发布" },
+      "timeout": 15000,
+      "description": "等待发布按钮出现"
+    },
+    {
+      "action": "scroll",
+      "target": { "selector": "button", "text": "发布" },
+      "description": "滚动到发布按钮（替代 scrollAllToBottom）"
+    },
+    {
+      "action": "click",
+      "target": { "selector": "button", "text": "发布" },
+      "description": "点击发布"
+    },
+    {
+      "action": "waitForNavigation",
+      "timeout": 30000,
+      "description": "等待发布完成"
+    }
+  ]
+}

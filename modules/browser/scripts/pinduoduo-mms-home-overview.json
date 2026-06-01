@@ -1,0 +1,121 @@
+{
+  "id": "pinduoduo-mms-home-overview",
+  "platform": "pinduoduo",
+  "name": "拼多多 · 采集后台首页概览",
+  "description": "抓取拼多多商家后台首页经营概览卡片数据",
+  "startUrl": "https://mms.pinduoduo.com/home/?msfrom=mms_sidenav",
+  "variables": [
+    {
+      "key": "pageUrl",
+      "label": "拼多多商家后台首页地址",
+      "type": "text",
+      "default": "https://mms.pinduoduo.com/home/?msfrom=mms_sidenav"
+    }
+  ],
+  "outputSchema": {
+    "filename": {
+      "prefix": "pinduoduo_mms_home_overview"
+    },
+    "csv": [
+      {
+        "type": "card",
+        "source": "execute_homeOverview",
+        "rowsFrom": "cards",
+        "columns": [
+          { "name": "类型", "from": "key" },
+          { "name": "当前", "from": "value" },
+          { "name": "昨日", "from": "yesterday" }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "navigateToHome",
+      "description": "打开拼多多商家后台首页",
+      "action": "execute",
+      "timeout": 30000,
+      "params": {
+        "saveAs": "navDone",
+        "fn": "(function(){var url=\"{{pageUrl}}\";var cur=location.href;if(cur.indexOf(url)===0||cur.indexOf(\"mms.pinduoduo.com/home\")!==-1&&cur.indexOf(\"/login\")===-1){return{alreadyHere:true}}location.href=url;return{alreadyHere:false}})"
+      }
+    },
+    {
+      "id": "settleAfterNav",
+      "description": "等待页面渲染就绪",
+      "action": "wait",
+      "duration": [1000, 1500]
+    },
+    {
+      "id": "assertLoggedIn",
+      "description": "校验已登录拼多多商家后台",
+      "action": "assertPageState",
+      "timeout": 5000,
+      "params": {
+        "failWhen": [
+          {
+            "type": "url",
+            "includes": "mms.pinduoduo.com/login"
+          },
+          {
+            "type": "url",
+            "includes": "/home/login"
+          },
+          {
+            "type": "exist",
+            "selector": ".login-container, .login-box, [class*='login']"
+          }
+        ],
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessage": "拼多多商家后台未登录，请在浏览器中先完成登录再重试"
+      }
+    },
+    {
+      "id": "assertPageReady",
+      "description": "校验首页概览卡片已加载",
+      "action": "assertPageState",
+      "timeout": 30000,
+      "params": {
+        "failWhen": [
+          {
+            "type": "exist",
+            "selector": ".spin, .ant-spin, .arco-spin, .loading, [class*='loading']"
+          },
+          {
+            "type": "text",
+            "value": "页面加载中"
+          }
+        ],
+        "errorCode": "PAGE_NOT_READY",
+        "errorMessage": "拼多多后台首页加载超时"
+      }
+    },
+    {
+      "id": "waitCardsReady",
+      "description": "等待经营卡片元素渲染完成",
+      "action": "waitForSelector",
+      "timeout": 45000,
+      "target": {
+        "selector": ".manage-data-chart__panel__card__content_val, .manage-data-chart__panel__card"
+      }
+    },
+    {
+      "id": "extractOverview",
+      "description": "提取首页概览卡片 DOM 数据",
+      "action": "execute",
+      "params": {
+        "saveAs": "homeOverview",
+        "fn": "(function(){var cards=document.querySelectorAll('.manage-data-chart__panel__card');if(cards.length===0)return null;var result=[];var metrics={};for(var i=0;i<cards.length;i++){var card=cards[i];var keyNode=card.querySelector('.manage-data-chart__panel__card_has-tips');var valueNode=card.querySelector('.manage-data-chart__panel__card__content_val');var unitNode=card.querySelector('.manage-data-chart__panel__card__content_unit');var yesterdayNode=card.querySelector('.manage-data-chart__panel__card__yesterday-value');var key=(keyNode&&keyNode.textContent||'').trim();var value=((valueNode&&valueNode.textContent||'').trim()+(unitNode&&unitNode.textContent||'').trim()).trim();var yesterday=(yesterdayNode&&yesterdayNode.textContent||'').replace(/\\s+/g,' ').replace(/^昨日\\s*/,'').trim();if(!key||!value)continue;result.push({key:key,value:value,yesterday:yesterday});metrics[key]=value}if(result.length===0)return null;return{metrics:metrics,cards:result,crawledAt:new Date().toISOString()}})"
+      }
+    },
+    {
+      "id": "validateExtracted",
+      "description": "校验采集结果非空",
+      "action": "transform",
+      "params": {
+        "saveAs": "extractionValidated",
+        "fn": "function(input,context){var data=context.execute_homeOverview;if(!data||!Array.isArray(data.cards)||data.cards.length===0)throw new Error('未找到首页概览卡片数据，请确认页面已正确加载');return{ok:true,count:data.cards.length}}"
+      }
+    }
+  ]
+}

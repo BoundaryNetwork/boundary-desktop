@@ -1,0 +1,480 @@
+{
+  "id": "taobao-detail",
+  "platform": "taobao",
+  "name": "淘系 · 采集详情",
+  "description": "采集淘宝/天猫商品详情页：SKU、图文详情、评论、问大家",
+  "contextSetup": {
+    "limitComments": {
+      "type": "number",
+      "default": 50
+    },
+    "limitAskAnswers": {
+      "type": "number",
+      "default": 50
+    },
+    "shouldQueryComments": {
+      "type": "derived",
+      "source": "limitComments",
+      "op": ">",
+      "value": 0
+    },
+    "shouldQueryAskAnswers": {
+      "type": "derived",
+      "source": "limitAskAnswers",
+      "op": ">",
+      "value": 0
+    },
+    "fetchDetail": {
+      "type": "number",
+      "default": 1
+    },
+    "shouldQueryDetail": {
+      "type": "derived",
+      "source": "fetchDetail",
+      "op": ">",
+      "value": 0
+    }
+  },
+  "variables": [
+    {
+      "key": "url",
+      "label": "商品链接",
+      "type": "text",
+      "placeholder": "https://item.taobao.com/item.htm?id=xxx",
+      "default": ""
+    },
+    {
+      "key": "limitComments",
+      "label": "评论数量（0=不采集，50=默认）",
+      "type": "text",
+      "default": "50"
+    },
+    {
+      "key": "limitAskAnswers",
+      "label": "问大家数量（0=不采集，50=默认）",
+      "type": "text",
+      "default": "50"
+    },
+    {
+      "key": "fetchDetail",
+      "label": "是否采集图文详情图（1=采集，0=不采集；只要评论/问大家时填 0）",
+      "type": "text",
+      "default": "1"
+    }
+  ],
+  "outputSchema": {
+    "excludeSessionKeys": [
+      "taobaoDescApi"
+    ],
+    "filename": {
+      "prefix": "taobao_detail"
+    },
+    "html": {
+      "generator": "taobao"
+    },
+    "csv": [
+      {
+        "type": "sku",
+        "source": "execute_taobaoItemInfo",
+        "rowsFrom": "skus",
+        "columns": [
+          {
+            "name": "sku_id",
+            "from": "sku_id"
+          },
+          {
+            "name": "prop_names",
+            "from": "prop_names"
+          },
+          {
+            "name": "price",
+            "from": "price"
+          },
+          {
+            "name": "promo_price",
+            "from": "promo_price"
+          },
+          {
+            "name": "quantity",
+            "from": "quantity"
+          },
+          {
+            "name": "logistics_time",
+            "from": "logistics_time"
+          }
+        ]
+      },
+      {
+        "type": "detail",
+        "source": "execute_detailList",
+        "columns": [
+          {
+            "name": "tag",
+            "from": "tag"
+          },
+          {
+            "name": "src",
+            "from": "src"
+          }
+        ]
+      },
+      {
+        "type": "comment",
+        "source": "taobaoCommentApi",
+        "columns": [
+          {
+            "name": "id",
+            "from": "id"
+          },
+          {
+            "name": "feedback",
+            "from": "feedback"
+          },
+          {
+            "name": "feedback_date",
+            "from": "feedbackDate"
+          },
+          {
+            "name": "user_nick",
+            "from": "userNick"
+          },
+          {
+            "name": "attachments",
+            "from": "feedVideoPathList",
+            "joinWith": "|"
+          }
+        ]
+      },
+      {
+        "type": "qa",
+        "source": "taobaoAskAnswerApi",
+        "columns": [
+          {
+            "name": "id",
+            "from": "id"
+          },
+          {
+            "name": "question",
+            "from": "question"
+          },
+          {
+            "name": "answer",
+            "from": "answer"
+          },
+          {
+            "name": "gmt_date",
+            "from": "gmtDate"
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "captureSessionStart",
+      "description": "开启多接口监听（问大家 / 评论 / 图文详情）",
+      "action": "sessionCapture",
+      "timeout": 3000,
+      "params": {
+        "sessionList": [
+          {
+            "sessionKey": "taobaoAskAnswerApi",
+            "when": "shouldQueryAskAnswers",
+            "urlIncludes": [
+              "/h5/mtop.taobao.wdj.list.merge.search/"
+            ],
+            "valueKey": [
+              {
+                "name": "id",
+                "path": "data.questionList[].questionId"
+              },
+              {
+                "name": "question",
+                "path": "data.questionList[].questionTitle"
+              },
+              {
+                "name": "answer",
+                "path": "data.questionList[].topAnswerList[].answerTitle"
+              },
+              {
+                "name": "gmtDate",
+                "path": "data.questionList[].gmtCreate"
+              }
+            ],
+            "countByValueKey": "data.questionList[].questionId",
+            "hasNextKey": "data.hasNext"
+          },
+          {
+            "sessionKey": "taobaoCommentApi",
+            "when": "shouldQueryComments",
+            "urlIncludes": [
+              "/h5/mtop.taobao.rate.detaillist.get/"
+            ],
+            "valueKey": [
+              {
+                "name": "id",
+                "path": "data.rateList[].id"
+              },
+              {
+                "name": "feedback",
+                "path": "data.rateList[].feedback"
+              },
+              {
+                "name": "feedbackDate",
+                "path": "data.rateList[].feedbackDate"
+              },
+              {
+                "name": "userNick",
+                "path": "data.rateList[].userNick"
+              },
+              {
+                "name": "feedPicPathList",
+                "path": "data.rateList[].feedPicPathList",
+                "reg": "^//(.*)$::https://$1",
+                "type": "array"
+              },
+              {
+                "name": "feedVideoPathList",
+                "path": "data.rateList[].video.cloudVideoUrl",
+                "reg": "^//(.*)$::https://$1",
+                "type": "array"
+              }
+            ],
+            "countByValueKey": "data.rateList[].id",
+            "hasNextKey": "data.hasNext"
+          },
+          {
+            "sessionKey": "taobaoDescApi",
+            "when": "shouldQueryDetail",
+            "urlIncludes": [
+              "/h5/mtop.taobao.detail.getdesc/"
+            ],
+            "valueKey": [
+              {
+                "name": "components",
+                "path": "data.components"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "navigateToDetail",
+      "description": "导航到商品详情页（监听已挂好，本次加载的接口都会被抓到）",
+      "action": "navigate",
+      "value": "{{url}}",
+      "timeout": 30000
+    },
+    {
+      "id": "assertTaobaoLoggedIn",
+      "description": "校验当前页面已登录",
+      "action": "assertPageState",
+      "timeout": 10000,
+      "params": {
+        "failWhen": [
+          {
+            "type": "url",
+            "includes": "login.taobao.com"
+          },
+          {
+            "type": "url",
+            "includes": "login.tmall.com"
+          },
+          {
+            "type": "exist",
+            "selector": "#fm-login-id"
+          }
+        ],
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessage": "当前淘宝/天猫页面未登录，请先登录后再重试"
+      }
+    },
+    {
+      "id": "assertTaobaoNotBlocked",
+      "description": "校验当前页面未被风控拦截",
+      "action": "assertPageState",
+      "timeout": 10000,
+      "params": {
+        "failWhen": [
+          {
+            "type": "exist",
+            "selector": "#baxia-punish .captcha-tips"
+          },
+          {
+            "type": "exist",
+            "selector": "#baxia-punish .warnning-text"
+          },
+          {
+            "type": "exist",
+            "selector": "#nocaptcha"
+          },
+          {
+            "type": "exist",
+            "selector": "#nc_1_wrapper"
+          },
+          {
+            "type": "exist",
+            "selector": ".nc-container .nc_scale"
+          },
+          {
+            "type": "text",
+            "value": "请拖动下方滑块完成验证"
+          },
+          {
+            "type": "text",
+            "value": "通过验证以确保正常访问"
+          }
+        ],
+        "errorCode": "RISK_CAPTCHA",
+        "errorMessage": "当前淘宝/天猫页面触发风控滑块验证，请先完成验证后再重试"
+      }
+    },
+    {
+      "id": "dismissPromotionPopup",
+      "description": "关闭营销弹窗（不存在则跳过）",
+      "action": "click",
+      "timeout": 5000,
+      "timeoutMode": "continue",
+      "target": {
+        "selector": "[class*=\"redpacketItemClose\"], [class*=\"popMask\"] ~ [class*=\"closeBtn\"], [class*=\"popMask\"] ~ * [class*=\"closeBtn\"], [class*=\"index_module_closeButton__\"]"
+      }
+    },
+    {
+      "id": "askAnswerScrollToEntry",
+      "description": "逐步滚动直到「查看全部问答」按钮出现（触发懒加载）",
+      "action": "scroll",
+      "timeout": 35000,
+      "when": "shouldQueryAskAnswers",
+      "target": {
+        "selector": "[class*=\"bottomBtnWrap\"] > [class*=\"bottomBtn\"], [class*=\"bottomBtn--\"]"
+      }
+    },
+    {
+      "id": "askAnswerClickEntry",
+      "description": "点击「查看全部问答」按钮",
+      "action": "click",
+      "timeout": 15000,
+      "when": "shouldQueryAskAnswers",
+      "target": {
+        "selector": "[class*=\"bottomBtnWrap\"] > [class*=\"bottomBtn\"], [class*=\"bottomBtn--\"]"
+      }
+    },
+    {
+      "id": "askAnswerScrollForApi",
+      "description": "问答抽屉内滚动加载数据",
+      "action": "scrollForSession",
+      "when": "shouldQueryAskAnswers",
+      "params": {
+        "sessionKey": "taobaoAskAnswerApi",
+        "limitTotal": "{{limitAskAnswers}}",
+        "limitScroll": 40,
+        "scrollStep": 600,
+        "hasNextKey": "hasNext"
+      },
+      "target": {
+        "selector": "[class*=\"AskAnswersWrap--\"] [class*=\"ContentArea--\"]"
+      }
+    },
+    {
+      "id": "askAnswerClose",
+      "description": "关闭问答抽屉",
+      "action": "click",
+      "timeout": 15000,
+      "when": "shouldQueryAskAnswers",
+      "target": {
+        "selector": "[class*=\"leftDrawer\"] [class*=\"closeWrap\"], [class*=\"AskAnswersWrap\"] [class*=\"closeWrap\"]"
+      }
+    },
+    {
+      "id": "commentScrollToEntry",
+      "description": "逐步滚动直到「查看全部评价」按钮出现（触发懒加载）",
+      "action": "scroll",
+      "timeout": 35000,
+      "when": "shouldQueryComments",
+      "target": {
+        "selector": "[class*=\"ShowButton\"], [class*=\"footer\"] [class*=\"ShowButton\"]"
+      }
+    },
+    {
+      "id": "commentOpen",
+      "description": "点击「查看全部评价」并确认评论抽屉出现",
+      "action": "click",
+      "timeout": 60000,
+      "when": "shouldQueryComments",
+      "target": {
+        "selector": "[class*=\"ShowButton\"], [class*=\"footer\"] [class*=\"ShowButton\"]"
+      }
+    },
+    {
+      "id": "commentScrollForApi",
+      "description": "评论抽屉内滚动加载数据",
+      "action": "scrollForSession",
+      "when": "shouldQueryComments",
+      "params": {
+        "sessionKey": "taobaoCommentApi",
+        "limitTotal": "{{limitComments}}",
+        "limitScroll": 40,
+        "scrollStep": 600,
+        "hasNextKey": "hasNext"
+      },
+      "target": {
+        "selector": "[class*=\"detailContentClassName\"] [class*=\"Comment\"] [class*=\"comments\"]"
+      }
+    },
+    {
+      "id": "commentClose",
+      "description": "关闭评论抽屉",
+      "action": "click",
+      "when": "shouldQueryComments",
+      "timeout": 15000,
+      "target": {
+        "selector": "[class*=\"detailContentClassName\"] [class*=\"closeWrap\"]"
+      }
+    },
+    {
+      "id": "triggerDescByScroll",
+      "description": "滚动主页面触发图文详情懒加载",
+      "action": "scrollForSession",
+      "when": "shouldQueryDetail",
+      "timeout": 60000,
+      "params": {
+        "sessionKey": "taobaoDescApi",
+        "limitScroll": 10,
+        "scrollStep": 1200
+      }
+    },
+    {
+      "id": "buildDetailList",
+      "description": "解析 layout + componentData，生成 detailList",
+      "action": "transform",
+      "when": "shouldQueryDetail",
+      "params": {
+        "input": {
+          "sessionKey": "taobaoDescApi"
+        },
+        "saveAs": "detailList",
+        "fn": "(function(input){var responses=Array.isArray(input)?input:[];var detailList=[];var seen={};function normalizeSrc(url){if(typeof url!==\"string\"||url.length===0)return\"\";if(url.indexOf(\"//\")===0)return\"https:\"+url;return url}function extractMediaFromHtml(html){var items=[];var tagRe=/<(img|video|source)\\b([^>]*)>/gi;var attrRe=/([\\w-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))/g;var m;while((m=tagRe.exec(html))!==null){var tagName=m[1].toLowerCase();var attrsStr=m[2]||\"\";var attrs={};var am;attrRe.lastIndex=0;while((am=attrRe.exec(attrsStr))!==null){attrs[am[1].toLowerCase()]=am[2]||am[3]||am[4]||\"\"}var raw=attrs.src||attrs[\"data-src\"]||\"\";var src=normalizeSrc(raw);if(!src)continue;items.push({tag:tagName===\"img\"?\"img\":\"video\",src:src})}return items}for(var ri=0;ri<responses.length;ri++){var row=responses[ri];var components=row&&row.components;if(!components)continue;var layout=Array.isArray(components.layout)?components.layout:[];var componentData=components.componentData;if(!componentData||typeof componentData!==\"object\")continue;for(var li=0;li<layout.length;li++){var entry=layout[li];var id=entry&&entry.ID;if(!id)continue;var comp=componentData[id];var model=comp&&comp.model;if(!model||typeof model!==\"object\")continue;var picUrl=normalizeSrc(model.picUrl);if(picUrl){var k1=\"img::\"+picUrl;if(!seen[k1]){seen[k1]=true;detailList.push({tag:\"img\",src:picUrl})}}if(typeof model.text===\"string\"&&model.text.length>0){var mediaItems=extractMediaFromHtml(model.text);for(var ii=0;ii<mediaItems.length;ii++){var k=mediaItems[ii].tag+\"::\"+mediaItems[ii].src;if(!seen[k]){seen[k]=true;detailList.push(mediaItems[ii])}}}}}return detailList})"
+      }
+    },
+    {
+      "id": "queryTaobaoDetail",
+      "description": "提取商品信息与 SKU 数据",
+      "action": "execute",
+      "timeout": 30000,
+      "params": {
+        "saveAs": "taobaoItemInfo",
+        "fn": "(function(){function findPropPathBySkuId(skuId,skus){for(const sku of skus){if(sku.skuId===skuId&&sku.propPath)return sku.propPath}return\"\"}function parsePropPath(propPath,props){if(!propPath)return\"\";const pidToProp={};for(const prop of props){if(prop.pid)pidToProp[prop.pid]=prop}const names=[];const parts=propPath.split(\";\");for(const part of parts){const[pid,vid]=part.split(\":\");if(pid&&vid&&pidToProp[pid]){const prop=pidToProp[pid];const value=prop?.valueMap?.[vid];if(value?.name)names.push(value.name)}}return names.join(\", \")}const root=window.__ICE_APP_CONTEXT__?.loaderData?.home?.data?.res;if(!root||typeof root!==\"object\")return null;const item=root.item||{};const seller=root.seller||{};const skuBase=root.skuBase||{};const skuBaseProps=Array.isArray(skuBase.props)?skuBase.props:[];const skuBaseSkus=Array.isArray(skuBase.skus)?skuBase.skus:[];const slimProps=skuBaseProps.map((prop)=>{const valueMap={};const rawValues=prop?.values;if(Array.isArray(rawValues)){rawValues.forEach((v)=>{if(v&&v.vid!=null)valueMap[v.vid]={name:v.name}})}else if(rawValues&&typeof rawValues===\"object\"){for(const k of Object.keys(rawValues)){const v=rawValues[k];valueMap[k]={name:v?.name}}}return{name:prop?.name,pid:prop?.pid,valueMap}});const skuCore=root.skuCore||{};const sku2infoRaw=skuCore.sku2info||{};const sku2info={};for(const[k,v]of Object.entries(sku2infoRaw)){if(!v)continue;sku2info[k]={price:v.price,subPrice:v.subPrice,quantity:v.quantity,logisticsTime:v.logisticsTime||\"\"}}const componentsVO=root.componentsVO||{};const titleVO=componentsVO.titleVO||{};const deliveryVO=componentsVO.deliveryVO||{};const rateVO=componentsVO.rateVO||{};const priceVO=componentsVO.priceVO||{};const sellerEvaluates=Array.isArray(seller.evaluates)?seller.evaluates:[];const storeCardVO=componentsVO.storeCardVO||{};const storeCardEvaluates=Array.isArray(storeCardVO.evaluates)?storeCardVO.evaluates:[];const allEvaluates=sellerEvaluates.length>0?sellerEvaluates:storeCardEvaluates;const skus=[];for(const[skuId,info]of Object.entries(sku2infoRaw)){if(!skuId||skuId===\"0\")continue;const propPath=findPropPathBySkuId(skuId,skuBaseSkus);const propNames=parsePropPath(propPath,slimProps);const priceText=info.price?.priceText;const priceMoney=info.price?.priceMoney;const price=priceText?parseFloat(priceText):priceMoney?parseFloat(priceMoney)/100:null;const subPriceText=info.subPrice?.priceText;const subPriceMoney=info.subPrice?.priceMoney;const promoPrice=subPriceText?parseFloat(subPriceText.replace(/[^\\d.]/g,\"\")):subPriceMoney?parseFloat(subPriceMoney)/100:null;skus.push({sku_id:skuId,prop_path:propPath,prop_names:propNames,price:price,promo_price:promoPrice,quantity:info.quantity,logistics_time:info.logisticsTime||\"\"})}const analysis={};if(skus.length>0){const prices=skus.map((s)=>s.price).filter((p)=>p!=null);const promoPrices=skus.map((s)=>s.promo_price).filter((p)=>p!=null);const quantities=skus.map((s)=>s.quantity).filter((q)=>q!=null);analysis.sku_count=skus.length;analysis.min_price=prices.length>0?Math.min(...prices):null;analysis.max_price=prices.length>0?Math.max(...prices):null;analysis.total_stock=quantities.reduce((a,b)=>a+b,0);analysis.has_promotion=promoPrices.some((p)=>p!=null&&prices.some((op)=>op!=null&&p<op));if(allEvaluates.length>0){const scores=allEvaluates.map((e)=>parseFloat(e.score)).filter((s)=>!isNaN(s));if(scores.length>0)analysis.avg_shop_score=scores.reduce((a,b)=>a+b,0)/scores.length}}return{item:{itemId:item.itemId,title:item.title,images:Array.isArray(item.images)?item.images:[],videos:Array.isArray(item.videos)?item.videos:[],vagueSellCount:item.vagueSellCount},seller:{sellerNick:seller.sellerNick,shopName:seller.shopName,shopId:seller.shopId,shopUrl:seller.shopUrl||\"\",sellerId:seller.sellerId,creditLevel:seller.creditLevel,evaluates:allEvaluates.map((e)=>({title:e.title,score:e.score,level:e.level,levelText:e.levelText}))},skuBase:{props:slimProps,skus:skuBaseSkus},skuCore:{sku2info:sku2infoRaw},componentsVO:{titleVO:{salesDesc:titleVO.salesDesc||item.vagueSellCount||\"\",title:titleVO.title?.title},deliveryVO:{freight:deliveryVO.freight||\"\",deliveryFromAddr:deliveryVO.deliveryFromAddr||\"\",agingDesc:deliveryVO.agingDesc},rateVO:{totalCount:rateVO.totalCount||\"\",favorableRate:rateVO.favorableRate},priceVO:{price:priceVO.price||null,extraPrice:priceVO.extraPrice||null}},skus:skus,analysis:analysis}})"
+      }
+    },
+    {
+      "id": "delay",
+      "description": "延迟确认",
+      "action": "wait",
+      "duration": [
+        500,
+        1000
+      ]
+    }
+  ]
+}

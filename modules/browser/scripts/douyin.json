@@ -1,0 +1,141 @@
+{
+  "id": "douyin",
+  "platform": "douyin",
+  "name": "抖音 · 发布短视频",
+  "taskName": "douyin_publish_video",
+  "startUrl": "https://creator.douyin.com/creator-micro/content/upload",
+  "humanize": {
+    "mouseSpeed": "normal",
+    "typingSpeed": "normal",
+    "mistakeRate": 0.03,
+    "extraPauseRate": 0.1
+  },
+  "variables": [
+    {
+      "key": "title",
+      "label": "视频标题",
+      "type": "text",
+      "placeholder": "吸引人的标题"
+    },
+    {
+      "key": "desc",
+      "label": "视频描述",
+      "type": "textarea",
+      "placeholder": "介绍视频内容…"
+    },
+    {
+      "key": "video",
+      "label": "图片 / 视频",
+      "type": "files",
+      "accept": "image/*,video/*"
+    },
+    {
+      "key": "tags",
+      "label": "话题标签（最多 5 个）",
+      "type": "text",
+      "placeholder": "#话题1 #话题2"
+    }
+  ],
+  "steps": [
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".upload-btn-input, input[type=file][accept*=video]", "text": "上传视频" },
+      "timeout": 12000,
+      "description": "等待上传区域"
+    },
+    {
+      "action": "upload",
+      "inputSelector": "input[type=file][accept*=video], .upload-input",
+      "value": "{{video}}",
+      "description": "上传视频文件"
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".input-title, input[placeholder*='标题']" },
+      "timeout": 30000,
+      "description": "等待视频处理完成"
+    },
+    { "action": "wait",
+      "duration": [800, 1800],
+      "description": "观察编辑器" 
+    },
+    {
+      "action": "execute",
+      "description": "设置默认竖封面",
+      "postWait": 0,
+      "params": {
+        "fn": "async function(ctx) { var COVER_ENTRY_TIMEOUT_MS = 5000; var COVER_DIALOG_TIMEOUT_MS = 5000; var COVER_OPTIONAL_PROMPT_TIMEOUT_MS = 3000; var COVER_APPLY_TIMEOUT_MS = 8000; var COVER_POLL_INTERVAL_MS = 500; var COVER_SUCCESS_STABLE_PASSES = 2; var wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }; var timeoutToAttempts = function(t) { return Math.ceil(t / COVER_POLL_INTERVAL_MS); }; var normalize = function(value) { return (value || '').replace(/\\s+/g, ' ').trim(); }; function dismissKnownModals() { var targets = ['我知道了', '知道了', '关闭']; for (var i = 0; i < targets.length; i++) { var text = targets[i]; var btn = Array.from(document.querySelectorAll('button,[role=\"button\"]')).find(function(el) { return (el.textContent || '').trim() === text; }); if (btn instanceof HTMLElement) { btn.click(); return; } } } function buildCoverCardState() { var card = null; var tipNode = Array.from(document.querySelectorAll('div,span,p')).find(function(el) { return normalize(el.textContent) === '竖封面3:4'; }); if (tipNode instanceof HTMLElement) { var cursor = tipNode.parentElement; while (cursor && cursor !== document.body) { var cls = cursor.className || ''; if (typeof cls === 'string' && cls.includes('coverControl')) { card = cursor; break; } cursor = cursor.parentElement; } if (!card) { var grandparent = tipNode.parentElement && tipNode.parentElement.parentElement; card = grandparent instanceof HTMLElement ? grandparent : null; } } if (!(card instanceof HTMLElement)) { var textNode = Array.from(document.querySelectorAll('div,span,p,button,label')).filter(function(el) { return normalize(el.textContent) === '选择封面'; }).pop() || Array.from(document.querySelectorAll('div,span,p,button,label')).find(function(el) { return normalize(el.textContent).includes('选择封面'); }); if (textNode instanceof HTMLElement) { var gp = textNode.parentElement && textNode.parentElement.parentElement; card = gp instanceof HTMLElement ? gp : null; } } if (!(card instanceof HTMLElement)) { return { found: false, textSummary: '', hasSelectText: false, hasDefaultHint: false, hasImagePreview: false }; } document.querySelectorAll('[data-opencli-cover-card=\"1\"]').forEach(function(el) { el.removeAttribute('data-opencli-cover-card'); }); card.setAttribute('data-opencli-cover-card', '1'); document.querySelectorAll('[data-opencli-cover-click=\"1\"]').forEach(function(el) { el.removeAttribute('data-opencli-cover-click'); }); var clickTarget = null; for (var ci = 0; ci < card.children.length; ci++) { var child = card.children[ci]; if (!(child instanceof HTMLElement)) continue; var childCls = typeof child.className === 'string' ? child.className : ''; if (childCls.includes('controlContainer')) continue; if (childCls.includes('cover-') && !childCls.includes('coverControl') && !childCls.includes('cover-tip')) { clickTarget = child; break; } } if (!(clickTarget instanceof HTMLElement)) { var selectTextNode = Array.from(card.querySelectorAll('div,span,p')).find(function(el) { return normalize(el.textContent) === '选择封面'; }); var cur = selectTextNode instanceof HTMLElement ? selectTextNode : null; while (cur && cur.parentElement && cur.parentElement !== card) { cur = cur.parentElement; } if (cur instanceof HTMLElement && cur.parentElement === card) { clickTarget = cur; } } if (!(clickTarget instanceof HTMLElement)) { clickTarget = card; } clickTarget.setAttribute('data-opencli-cover-click', '1'); var textSummary = normalize(card.innerText).slice(0, 300); var hasSelectText = textSummary.includes('选择封面'); var hasDefaultHint = textSummary.includes('竖封面3:4'); var hasImagePreview = !!card.querySelector('img') || Array.from(card.querySelectorAll('*')).some(function(el) { var bg = getComputedStyle(el).backgroundImage || ''; return bg.includes('url('); }); return { found: true, textSummary: textSummary, hasSelectText: hasSelectText, hasDefaultHint: hasDefaultHint, hasImagePreview: hasImagePreview }; } function buildCoverDialogState() { var titleNode = Array.from(document.querySelectorAll('div,span,p,h1,h2,h3')).find(function(el) { return normalize(el.textContent).includes('设置竖封面'); }); var dialog = titleNode || null; while (dialog && dialog !== document.body) { var buttons = Array.from(dialog.querySelectorAll('button,[role=\"button\"]')); var completeButton = buttons.find(function(el) { return normalize(el.textContent) === '完成'; }); if (completeButton && dialog instanceof HTMLElement) { document.querySelectorAll('[data-opencli-cover-dialog=\"1\"]').forEach(function(el) { el.removeAttribute('data-opencli-cover-dialog'); }); dialog.setAttribute('data-opencli-cover-dialog', '1'); var disabled = completeButton.hasAttribute('disabled') || completeButton.getAttribute('aria-disabled') === 'true'; return { found: true, textSummary: normalize(dialog.innerText).slice(0, 300), hasTitle: true, hasComplete: true, completeDisabled: disabled }; } dialog = dialog.parentElement; } return { found: false, textSummary: '', hasTitle: false, hasComplete: false, completeDisabled: false }; } async function openCoverSelectionDialog() { var lastCardState = null; for (var attempt = 0; attempt < timeoutToAttempts(COVER_ENTRY_TIMEOUT_MS); attempt++) { var cardState = buildCoverCardState(); lastCardState = cardState; if (cardState && cardState.found) { var target = document.querySelector('[data-opencli-cover-click=\"1\"]') || document.querySelector('[data-opencli-cover-card=\"1\"]'); if (target instanceof HTMLElement) { target.click(); var lastDialogState = null; for (var dialogAttempt = 0; dialogAttempt < timeoutToAttempts(COVER_DIALOG_TIMEOUT_MS); dialogAttempt++) { var dialogState = buildCoverDialogState(); lastDialogState = dialogState; if (dialogState && dialogState.found && dialogState.hasTitle && dialogState.hasComplete) { return { cardStateBefore: cardState, dialogState: dialogState }; } await wait(COVER_POLL_INTERVAL_MS); } throw new Error('封面设置失败: cover-dialog-timeout'); } } await wait(COVER_POLL_INTERVAL_MS); } throw new Error('封面设置失败: cover-entry-missing'); } async function confirmCoverSelection() { var precheck = (function() { var dialog = document.querySelector('[data-opencli-cover-dialog=\"1\"]'); if (!(dialog instanceof HTMLElement)) return { ok: false, reason: 'cover-dialog-missing' }; var button = Array.from(dialog.querySelectorAll('button,[role=\"button\"]')).find(function(el) { return normalize(el.textContent) === '完成'; }); if (!(button instanceof HTMLElement)) return { ok: false, reason: 'cover-complete-missing' }; var disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true'; if (disabled) return { ok: false, reason: 'cover-complete-disabled' }; return { ok: true }; })(); if (!precheck || !precheck.ok) { throw new Error('封面设置失败: ' + (precheck && precheck.reason ? precheck.reason : 'cover-complete-missing')); } var dialog = document.querySelector('[data-opencli-cover-dialog=\"1\"]'); var button = dialog ? Array.from(dialog.querySelectorAll('button,[role=\"button\"]')).find(function(el) { return normalize(el.textContent) === '完成'; }) : null; if (button instanceof HTMLElement) { try { button.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); } catch (_) { try { button.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) { button.scrollIntoView(); } } await wait(300); button.click(); } } async function handleOptionalCoverPrompt() { for (var attempt = 0; attempt < timeoutToAttempts(COVER_OPTIONAL_PROMPT_TIMEOUT_MS); attempt++) { var btn = Array.from(document.querySelectorAll('button,[role=\"button\"],div,span')).find(function(el) { return normalize(el.textContent) === '暂不设置'; }); if (btn instanceof HTMLElement) { btn.click(); return true; } await wait(COVER_POLL_INTERVAL_MS); } return false; } async function waitForCoverCardApplied(cardStateBefore) { var stablePasses = 0; var lastCardState = cardStateBefore; for (var attempt = 0; attempt < timeoutToAttempts(COVER_APPLY_TIMEOUT_MS); attempt++) { var target = document.querySelector('[data-opencli-cover-click=\"1\"]') || document.querySelector('[data-opencli-cover-card=\"1\"]'); var cardState; if (!(target instanceof HTMLElement)) { cardState = { found: false, textSummary: '', hasSelectText: false, hasDefaultHint: false, hasImagePreview: false }; } else { var textSummary = normalize(target.innerText).slice(0, 300); var hasImagePreview = !!target.querySelector('img') || Array.from(target.querySelectorAll('*')).some(function(el) { var bg = getComputedStyle(el).backgroundImage || ''; return bg.includes('url('); }); cardState = { found: true, textSummary: textSummary, hasSelectText: textSummary.includes('选择封面'), hasDefaultHint: textSummary.includes('竖封面3:4'), hasImagePreview: hasImagePreview }; } lastCardState = cardState; var changed = !cardState.hasSelectText && !cardState.hasDefaultHint && cardState.hasImagePreview; if (changed) { stablePasses++; if (stablePasses >= COVER_SUCCESS_STABLE_PASSES) return cardState; } else { stablePasses = 0; } await wait(COVER_POLL_INTERVAL_MS); } throw new Error('封面设置失败: cover-apply-timeout'); } dismissKnownModals(); var opened = await openCoverSelectionDialog(); await wait(800 + Math.floor(Math.random() * 1000)); await confirmCoverSelection(); await handleOptionalCoverPrompt(); await waitForCoverCardApplied(opened.cardStateBefore); return true; }"
+      }
+    },
+    {
+      "action": "click",
+      "target": { "selector": ".input-title, input[placeholder*='标题']" },
+      "description": "点击标题输入框"
+    },
+    {
+      "action": "type",
+      "target": { "selector": ".input-title, input[placeholder*='标题']" },
+      "value": "{{title}}",
+      "description": "输入标题"
+    },
+    {
+      "action": "wait",
+      "duration": [600, 1200]
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".notranslate, .zone-container, div[contenteditable='true']" },
+      "timeout": 10000,
+      "description": "等待描述编辑器"
+    },
+    {
+      "action": "click",
+      "target": { "selector": ".notranslate, .zone-container, div[contenteditable='true']" },
+      "description": "点击描述输入框"
+    },
+    {
+      "action": "type",
+      "target": { "selector": ".notranslate, .zone-container, div[contenteditable='true']" },
+      "value": "{{desc}}",
+      "description": "输入描述"
+    },
+    {
+      "action": "wait",
+      "duration": [800, 1500]
+    },
+    {
+      "action": "type",
+      "target": { "selector": ".zone-container, .notranslate, div[contenteditable='true']" },
+      "value": " {{tags}}",
+      "noClick": true,
+      "tagMode": true,
+      "maxTags": 5,
+      "description": "输入话题标签"
+    },
+    {
+      "action": "wait",
+      "duration": [400, 800]
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": "button", "text": "发布" },
+      "timeout": 15000,
+      "description": "等待发布按钮出现"
+    },
+    {
+      "action": "scroll",
+      "target": { "selector": "button", "text": "发布" },
+      "description": "人类化滚动到发布按钮（带进可视区再点）"
+    },
+    {
+      "action": "click",
+      "target": { "selector": "button", "text": "发布" },
+      "description": "点击发布"
+    },
+    {
+      "action": "waitForNavigation",
+      "timeout": 15000,
+      "description": "等待发布完成"
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "id": "sycm-home-overview",
+  "_note": "以下字段来自参考项目(Electron-demo)schema，本项目引擎/loader 不读取、仅兼容保留：taskName、humanize、contextSetup 内的 type:\"string\"/sourceVar、variables 内的 type:\"selector\"/options/placeholder、execute 的 required。真正生效的是 id/name/startUrl/steps/contextSetup(仅 number|derived)/variables(key 经 {{}} 注入)/outputSchema。拟人化行为写死在 electron/browser/automation/mouse.ts 与 engine.ts，humanize 块无效。requestDateType/requestDateRange/device 经 variables 传入并由 buildContext 的 {...vars} 透传给 execute fn，故仍生效；它们在 contextSetup 里的同名 string 项才是 no-op。",
+  "platform": "sycm-taobao",
+  "name": "生意参谋 · 首页实时经营指标",
+  "taskName": "sycm_taobao_home_live_metrics",
+  "startUrl": "https://sycm.taobao.com/portal/home.htm",
+  "humanize": {
+    "mouseSpeed": "normal",
+    "typingSpeed": "normal",
+    "mistakeRate": 0.03,
+    "extraPauseRate": 0.1
+  },
+  "outputSchema": {
+    "filename": {
+      "prefix": "sycm_taobao_home_live_metrics"
+    },
+    "csv": [
+      {
+        "type": "metric",
+        "source": "execute_sycmLiveMetrics",
+        "rowsFrom": "rows",
+        "columns": [
+          { "name": "field", "from": "field" },
+          { "name": "metric", "from": "metric" },
+          { "name": "value", "from": "value" },
+          { "name": "cycleCrc", "from": "cycleCrc" },
+          { "name": "periodLabel", "from": "periodLabel" },
+          { "name": "dateRange", "from": "dateRange" }
+        ]
+      }
+    ]
+  },
+  "contextSetup": {
+    "requestDateType": {
+      "type": "string",
+      "sourceVar": "requestDateType",
+      "default": "day"
+    },
+    "requestDateRange": {
+      "type": "string",
+      "sourceVar": "requestDateRange",
+      "default": ""
+    },
+    "device": {
+      "type": "string",
+      "sourceVar": "device",
+      "default": "0"
+    }
+  },
+  "variables": [
+    {
+      "key": "requestDateType",
+      "label": "时间类型",
+      "type": "selector",
+      "default": "day",
+      "options": [
+        {
+          "value": "today",
+          "label": "实时/今天"
+        },
+        {
+          "value": "day",
+          "label": "昨天/自定义日期"
+        }
+      ]
+    },
+    {
+      "key": "requestDateRange",
+      "label": "自定义日期范围",
+      "type": "text",
+      "default": "",
+      "placeholder": "YYYY-MM-DD|YYYY-MM-DD；留空默认昨天；实时数据请留空"
+    },
+    {
+      "key": "device",
+      "label": "设备类型",
+      "type": "selector",
+      "default": "0",
+      "options": [
+        {
+          "value": "0",
+          "label": "全部"
+        },
+        {
+          "value": "1",
+          "label": "PC"
+        },
+        {
+          "value": "2",
+          "label": "无线"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "wait_home_settle",
+      "description": "等待生意参谋首页加载完成",
+      "action": "wait",
+      "duration": [5000, 15000]
+    },
+    {
+      "id": "assert_logged_in",
+      "description": "校验已登录生意参谋",
+      "action": "assertPageState",
+      "timeout": 8000,
+      "params": {
+        "failWhen": [
+          {
+            "type": "url",
+            "includes": "login.taobao.com"
+          },
+          {
+            "type": "url",
+            "includes": "/login"
+          },
+          {
+            "type": "url",
+            "includes": "/passport"
+          },
+          {
+            "type": "url",
+            "includes": "error.htm"
+          },
+          {
+            "type": "exist",
+            "selector": "#fm-login-id, input[name=\"fm-login-id\"], input[name=\"TPL_username\"]"
+          }
+        ],
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessage": "生意参谋未登录或当前账号无权限（页面跳到了登录页/error.htm），请先登录有权限的店铺后重试"
+      }
+    },
+    {
+      "id": "wait_home_ready",
+      "description": "等待生意参谋首页可用",
+      "action": "waitForSelector",
+      "timeout": 45000,
+      "target": {
+        "selector": "button.ant-btn-primary.ant-btn-sm, .oui-canary-btn.ant-btn-primary, [class*=\"oui-canary\"], [class*=\"index\"]"
+      }
+    },
+    {
+      "id": "fetch_live_metrics",
+      "description": "请求生意参谋首页经营指标接口",
+      "action": "execute",
+      "params": {
+        "saveAs": "sycmLiveMetrics",
+        "required": true,
+        "fn": "async function collectSycmLiveMetrics(context) {\n  const FIELD_LABELS = {\n    uv: '访客',\n    pv: '浏览量',\n    cltItmCnt: '商品收藏人数',\n    cartByrCnt: '加购人数',\n    cartItemCnt: '加购件数',\n    payAmt: '支付金额',\n    netPaymentAmount: '净支付金额',\n    payByrCnt: '支付买家数',\n    payRate: '支付转化率',\n    payOrdCnt: '支付子订单数',\n    payItmCnt: '支付件数',\n    payPct: '客单价',\n    p4pExpendAmt: '关键词推广花费',\n    cubeAmt: '精准人群推广花费',\n    adStrategyAmt: '智能场景花费',\n    admCostFamtQzt: '全站推广花费',\n    tkExpendAmt: '淘宝客佣金',\n    rfdSucAmt: '退款金额(完结时间)',\n    payShopRfdAmt: '退款金额(支付时间)',\n    ordRfdRate: '订单退款率',\n    payAmtRfdRate: '金额退款率',\n    realPayrealRfdRate: '签售退款率',\n  };\n  const PERCENT_FIELDS = new Set(['payRate', 'ordRfdRate', 'payAmtRfdRate', 'realPayrealRfdRate']);\n\n  function pad(n) {\n    return String(n).padStart(2, '0');\n  }\n\n  function formatDate(date) {\n    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());\n  }\n\n  function parseDate(text) {\n    const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(String(text || '').trim());\n    if (!match) return null;\n    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));\n    if (formatDate(date) !== match[0]) return null;\n    return date;\n  }\n\n  function diffDays(start, end) {\n    return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;\n  }\n\n  function resolveRange() {\n    const today = new Date();\n    today.setHours(0, 0, 0, 0);\n    const yesterday = new Date(today);\n    yesterday.setDate(yesterday.getDate() - 1);\n\n    const requestDateType = String(context.requestDateType || '').trim() || 'day';\n    const rawRange = String(context.requestDateRange || '').trim();\n    if (requestDateType === 'today') {\n      return {\n        requestDateType,\n        apiMode: 'today',\n        dateType: 'today',\n        dateRange: '',\n        effectiveDateRange: formatDate(today) + '|' + formatDate(today),\n        effectiveMetricPeriodLabel: '实时',\n      };\n    }\n\n    const dateRange = rawRange || (formatDate(yesterday) + '|' + formatDate(yesterday));\n    const parts = dateRange.split('|');\n    if (parts.length !== 2) {\n      throw new Error('requestDateRange 必须是 YYYY-MM-DD|YYYY-MM-DD，留空则默认昨天');\n    }\n    const start = parseDate(parts[0]);\n    const end = parseDate(parts[1]);\n    if (!start || !end) {\n      throw new Error('requestDateRange 日期格式无效，必须是 YYYY-MM-DD|YYYY-MM-DD');\n    }\n    if (start > end) {\n      throw new Error('requestDateRange 开始日期不能晚于结束日期');\n    }\n    if (end >= today) {\n      throw new Error('requestDateRange 不支持今天或未来日期；实时数据请使用 requestDateType=today');\n    }\n    const earliest = new Date(today);\n    earliest.setFullYear(earliest.getFullYear() - 1);\n    if (start < earliest) {\n      throw new Error('requestDateRange 不能早于最近一年');\n    }\n    if (diffDays(start, end) > 31) {\n      throw new Error('requestDateRange 最大支持 31 天');\n    }\n\n    const __len = diffDays(start, end);\n    const __prevEnd = new Date(start);\n    __prevEnd.setDate(__prevEnd.getDate() - 1);\n    const __prevStart = new Date(__prevEnd);\n    __prevStart.setDate(__prevStart.getDate() - (__len - 1));\n    const __curRange = formatDate(start) + '|' + formatDate(end);\n    const __prevRange = formatDate(__prevStart) + '|' + formatDate(__prevEnd);\n    return {\n      requestDateType,\n      apiMode: 'custom',\n      dateType: 'compareRange',\n      dateRange: __curRange + ',' + __prevRange,\n      effectiveDateRange: __curRange,\n      effectiveMetricPeriodLabel: rawRange ? '自定义' : '昨天',\n    };\n  }\n\n  function readCookie(name) {\n    const escaped = name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n    const match = document.cookie.match(new RegExp('(?:^|;\\\\s*)' + escaped + '=([^;]*)'));\n    return match ? decodeURIComponent(match[1]) : '';\n  }\n\n  function resolveToken() {\n    const urlToken = new URL(location.href).searchParams.get('token') || '';\n    const cookieToken = readCookie('_tb_token_') || readCookie('token');\n    const token = urlToken || cookieToken;\n    if (!token) {\n      throw new Error('未找到生意参谋 token，请确认已登录 sycm.taobao.com 后重试');\n    }\n    return token;\n  }\n\n  function appendQuery(url, query) {\n    const u = new URL(url, location.origin);\n    Object.entries(query).forEach(function(entry) {\n      const key = entry[0];\n      const value = entry[1];\n      if (value !== undefined && value !== null) {\n        u.searchParams.set(key, String(value));\n      }\n    });\n    return u.toString();\n  }\n\n  async function fetchJson(url, query) {\n    const fullUrl = appendQuery(url, Object.assign({}, query, { _: Date.now(), token }));\n    const response = await fetch(fullUrl, {\n      credentials: 'include',\n      headers: {\n        accept: 'application/json, text/plain, */*',\n        'sycm-referer': '/portal/home.htm',\n      },\n    });\n    const text = await response.text();\n    let json = null;\n    try {\n      json = text ? JSON.parse(text) : null;\n    } catch (error) {\n      throw new Error('生意参谋接口返回非 JSON: ' + text.slice(0, 120));\n    }\n    if (!response.ok) {\n      throw new Error('生意参谋接口请求失败 HTTP ' + response.status + ': ' + text.slice(0, 120));\n    }\n    if (json && json.success === false) {\n      throw new Error('生意参谋接口返回失败: ' + (json.message || json.msg || json.errorMsg || JSON.stringify(json).slice(0, 120)));\n    }\n    return { url: fullUrl, body: json };\n  }\n\n  function unwrapPayload(json) {\n    const root = json && json.content ? json.content : json;\n    const candidates = [\n      root && root.data && root.data.data,\n      root && root.data && root.data.list,\n      root && root.data,\n      root,\n    ];\n    for (let i = 0; i < candidates.length; i += 1) {\n      if (candidates[i] && typeof candidates[i] === 'object') return candidates[i];\n    }\n    return {};\n  }\n\n  function pickMetric(source, key) {\n    if (!source || typeof source !== 'object') return null;\n    const buckets = [source, source.today, source.yestday, source.indexes, source.coreIndex, source.overview, source.data];\n    for (let i = 0; i < buckets.length; i += 1) {\n      const b = buckets[i];\n      if (b && typeof b === 'object' && b[key] !== undefined && b[key] !== null) return b[key];\n    }\n    return null;\n  }\n\n  function normalizeValue(raw, key) {\n    if (raw === null || raw === undefined) return '';\n    const value = typeof raw === 'object'\n      ? (raw.value ?? raw.val ?? raw.v ?? raw.num ?? raw.amount ?? '')\n      : raw;\n    if (value === null || value === undefined || value === '') return '';\n    if (PERCENT_FIELDS.has(key)) {\n      const numeric = Number(value);\n      if (!Number.isNaN(numeric)) return (numeric * 100).toFixed(2).replace(/\\.00$/, '') + '%';\n    }\n    const numeric = Number(value);\n    if (!Number.isNaN(numeric)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);\n    return String(value);\n  }\n\n  function normalizeCycle(raw) {\n    if (!raw || typeof raw !== 'object') return '';\n    const value = raw.cycleCrc ?? raw.cycleRate ?? raw.crc ?? raw.ratio ?? raw.linkRelativeRatio ?? '';\n    if (value === null || value === undefined || value === '') return '';\n    return String(value);\n  }\n\n  const range = resolveRange();\n  const token = resolveToken();\n  const device = String(context.device || '0');\n  const baseQuery = range.apiMode === 'today'\n    ? { needCycleCrc: true, dateType: range.dateType, dateRange: range.dateRange }\n    : { needCycleCrc: true, dateType: range.dateType, dateRange: range.dateRange, device: device };\n\n  const overviewUrl = range.apiMode === 'today'\n    ? 'https://sycm.taobao.com/portal/live/new/index/overview/v3.json'\n    : 'https://sycm.taobao.com/portal/long/period/nodistinct/coreIndex/getShopMainIndexes/v3.json';\n  const trendUrl = range.apiMode === 'today'\n    ? 'https://sycm.taobao.com/portal/live/new/index/trend/v3.json'\n    : 'https://sycm.taobao.com/portal/long/period/nodistinct/coreIndex/new/trend/v3.json';\n\n  const overview = await fetchJson(overviewUrl, baseQuery);\n  const trend = await fetchJson(trendUrl, Object.assign({}, baseQuery, { needCycleCrc: undefined }));\n  const overviewData = unwrapPayload(overview.body);\n  const trendData = unwrapPayload(trend.body);\n  const rows = Object.keys(FIELD_LABELS).map(function(key) {\n    const raw = pickMetric(overviewData, key);\n    return {\n      field: key,\n      metric: FIELD_LABELS[key],\n      value: normalizeValue(raw, key),\n      cycleCrc: normalizeCycle(raw),\n      periodLabel: range.effectiveMetricPeriodLabel,\n      dateRange: range.effectiveDateRange,\n    };\n  });\n\n  return {\n    extractedAt: new Date().toISOString(),\n    platform: 'sycm-taobao',\n    request: {\n      requestDateType: range.requestDateType,\n      dateType: range.dateType,\n      dateRange: range.dateRange,\n      device: device,\n      apiMode: range.apiMode,\n    },\n    effectiveMetricPeriodLabel: range.effectiveMetricPeriodLabel,\n    effectiveDateRange: range.effectiveDateRange,\n    rows,\n    raw: {\n      overview: overview.body,\n      trend: trend.body,\n      overviewData,\n      trendData,\n    },\n    requestUrls: {\n      overview: overview.url.replace(/token=[^&]+/, 'token=<redacted>'),\n      trend: trend.url.replace(/token=[^&]+/, 'token=<redacted>'),\n    },\n  };\n}"
+      }
+    }
+  ]
+}

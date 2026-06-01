@@ -1,0 +1,134 @@
+{
+  "id": "xiaohongshu",
+  "platform": "xiaohongshu",
+  "name": "小红书 · 发布图文笔记",
+  "taskName": "xiaohongshu_publish_note",
+  "startUrl": "https://creator.xiaohongshu.com/new/home",
+  "humanize": {
+    "mouseSpeed": "normal",
+    "typingSpeed": "normal",
+    "mistakeRate": 0.03,
+    "extraPauseRate": 0.1
+  },
+  "variables": [
+    {
+      "key": "title",
+      "label": "笔记标题",
+      "type": "text",
+      "placeholder": "填写标题会有更多赞哦"
+    },
+    {
+      "key": "content",
+      "label": "正文内容（含话题最多 1000 字）",
+      "type": "textarea",
+      "placeholder": "分享你的故事…"
+    },
+    {
+      "key": "images",
+      "label": "图片 / 视频",
+      "type": "files",
+      "accept": "image/*,video/*"
+    },
+    {
+      "key": "tags",
+      "label": "话题标签（最多 10 个）",
+      "type": "text",
+      "placeholder": "#话题1 #话题2"
+    }
+  ],
+  "steps": [
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".btn-wrapper", "text": "发布笔记" },
+      "timeout": 10000,
+      "description": "等待发布笔记按钮"
+    },
+    {
+      "action": "hover",
+      "target": { "selector": ".btn-wrapper", "text": "发布笔记" },
+      "description": "悬停展开发布菜单"
+    },
+    {
+      "action": "wait",
+      "duration": [400, 700]
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": ".publish-video-popover .container", "text": "上传图文" },
+      "timeout": 5000,
+      "description": "等待下拉菜单"
+    },
+    {
+      "action": "click",
+      "target": { "selector": ".publish-video-popover .container", "text": "上传图文" },
+      "description": "点击上传图文"
+    },
+    {
+      "action": "wait",
+      "duration": [600, 1000]
+    },
+    {
+      "action": "upload",
+      "inputSelector": "input.upload-input",
+      "value": "{{images}}",
+      "description": "上传图片文件"
+    },
+    {
+      "action": "waitForElement",
+      "target": { "selector": "input[placeholder='填写标题会有更多赞哦']" },
+      "timeout": 25000,
+      "retry": 2,
+      "description": "等待编辑区域加载"
+    },
+    {
+      "action": "type",
+      "target": { "selector": "input[placeholder='填写标题会有更多赞哦']" },
+      "value": "{{title}}",
+      "description": "输入标题"
+    },
+    {
+      "action": "wait",
+      "duration": [800, 1500]
+    },
+    {
+      "action": "type",
+      "target": { "selector": ".ProseMirror" },
+      "value": "{{content}}",
+      "description": "输入正文"
+    },
+    {
+      "action": "wait",
+      "duration": [600, 1200]
+    },
+    {
+      "action": "type",
+      "target": { "selector": ".ProseMirror" },
+      "value": "\n{{tags}}",
+      "noClick": true,
+      "tagMode": true,
+      "maxTags": 10,
+      "description": "输入话题标签"
+    },
+    {
+      "action": "wait",
+      "duration": [400, 800]
+    },
+    {
+      "action": "waitForElement",
+      "target": { "shadowHost": "xhs-publish-btn", "selector": "button.bg-red" },
+      "timeout": 10000,
+      "description": "等待发布按钮"
+    },
+    {
+      "action": "click",
+      "target": { "shadowHost": "xhs-publish-btn", "selector": "button.bg-red" },
+      "description": "点击发布按钮"
+    },
+    {
+      "action": "waitForNavigation",
+      "timeout": 30000,
+      "retry": 2,
+      "description": "等待发布完成"
+    }
+  ]
+}
