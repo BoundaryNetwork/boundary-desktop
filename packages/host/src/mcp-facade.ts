@@ -5,8 +5,8 @@ import type { ToolFacade } from "./facade.js";
 
 /** MCP 门面:把三件套(list/invoke/version)映射成 MCP 协议,接入标准 Agent 生态。
  *
- *  传输用 Streamable HTTP 的**无状态子集**:客户端 POST 单条 JSON-RPC,服务端以
- *  application/json 单条应答(无 SSE、无 session)。覆盖 initialize / tools/list /
+ *  端点 POST /mcp,传输用 Streamable HTTP 的**无状态子集**:客户端 POST 单条 JSON-RPC,
+ *  服务端以 application/json 单条应答(无 SSE、无 session)。覆盖 initialize / tools/list /
  *  tools/call / ping,足够标准 MCP HTTP 客户端 list 到 tool 并调用。
  *
  *  无状态意味着不主动推 tools/list_changed —— 故 capabilities.tools 不声明 listChanged,
@@ -64,6 +64,12 @@ async function handleHttp(
   // Origin)。带 Origin 的一律拒,且不发任何 CORS 头(浏览器跨源直接失败)。
   if (req.headers.origin) {
     res.writeHead(403).end("Origin not allowed");
+    return;
+  }
+  // 端点固定在 /mcp(MCP Streamable HTTP 约定);其它路径 404。
+  const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  if (pathname !== "/mcp") {
+    res.writeHead(404).end("Not found");
     return;
   }
   // Bearer token 鉴权(壳启动时注入,默认随机、BOUNDARY_FACADE_TOKEN 可覆盖)。

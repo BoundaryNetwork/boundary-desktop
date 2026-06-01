@@ -232,7 +232,7 @@ void app.whenReady().then(async () => {
 
   const mcpPort = Number(process.env.BOUNDARY_MCP_PORT ?? 0);
   const mcp = await startMcpFacade(registry.facade(), { port: mcpPort, token: facadeToken });
-  console.log(`[shell] MCP 门面已起:http://127.0.0.1:${mcp.port}`);
+  console.log(`[shell] MCP 门面已起:http://127.0.0.1:${mcp.port}/mcp`);
   console.log(`[shell] 门面访问 token:${facadeToken}`);
 
   app.on("activate", () => {
