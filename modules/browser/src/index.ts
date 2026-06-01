@@ -22,6 +22,7 @@ let surface: MainContext["surface"] = undefined;
 let theme: "light" | "dark" = "light";
 let profileSeq = 0;
 const profiles = new Map<string, string>([["default", "默认"]]); // 账号(profile)id → 名;各自分区隔离
+let persistProfiles: () => void = () => {}; // 把 profiles + 当前账号写入 ctx.storage(跨重启留存)
 const cleanups: Array<() => void> = [];
 
 export default defineModule<MainContext>({
@@ -30,6 +31,17 @@ export default defineModule<MainContext>({
     if (!surface) throw new Error("browser 模块需要框架分配 UI 区域(MainContext.surface)");
     const s = surface;
     theme = s.theme.get();
+
+    // 账号(profile)跨重启留存:回载已存账号 + 当前账号(经持久化的 ctx.storage);后续变更落盘。
+    persistProfiles = () => {
+      void ctx.storage.set("profiles", { list: [...profiles.entries()], current: store?.currentProfile() ?? "default" });
+    };
+    const savedProfiles = await ctx.storage.get<{ list: [string, string][]; current: string }>("profiles");
+    if (savedProfiles?.list?.length) {
+      profiles.clear();
+      for (const [id, name] of savedProfiles.list) profiles.set(id, name);
+      profileSeq = savedProfiles.list.length; // 续号,避免新账号 id 撞已存
+    }
 
     // chrome 条:模块自带的 toolbar 渲染页,经 app:// + import map 载入(react 走宿主 vendor)。
     chromeView = new WebContentsView({
@@ -61,7 +73,8 @@ export default defineModule<MainContext>({
       startPage: newtabUrl,
       onNav: (id, patch) => store!.update(id, patch),
     });
-    store.open(""); // 初始一个新标签页
+    if (savedProfiles?.current && profiles.has(savedProfiles.current)) store.setCurrentProfile(savedProfiles.current);
+    store.open(""); // 初始一个新标签页(用回载的当前账号)
 
     // 对外能力:注册 browser.* 工具(自动加前缀,经 WS/MCP/CLI 门面暴露;句柄由 ctx 自动回收)。
     for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url) })) {
@@ -180,7 +193,10 @@ function showProfileMenu(): void {
   const cur = store.currentProfile();
   const items: MenuItemConstructorOptions[] = [...profiles.entries()].map(([id, name]) => ({
     label: (id === cur ? "✓ " : "  ") + name,
-    click: () => store?.setCurrentProfile(id),
+    click: () => {
+      store?.setCurrentProfile(id);
+      persistProfiles();
+    },
   }));
   items.push(
     { type: "separator" },
@@ -190,6 +206,7 @@ function showProfileMenu(): void {
         const id = `profile-${++profileSeq}`;
         profiles.set(id, `账号 ${profiles.size}`);
         store?.setCurrentProfile(id);
+        persistProfiles();
       },
     },
   );
