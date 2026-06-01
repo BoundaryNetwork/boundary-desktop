@@ -19,6 +19,9 @@ import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
 import { DiskStorageBackend } from "./storage.js";
 
+// 应用 locale 锁 zh-CN(面向中文场景):navigator.language 与首选语言一致,避免系统 locale
+// 漏出诡异组合成为反爬特征。注:navigator.languages 数组尾项仍来自系统,完全接管需后续 CDP 方案。
+app.commandLine.appendSwitch("lang", "zh-CN");
 registerAppScheme(); // 必须在 app ready 前
 
 const authDriver = new ShellAuthDriver();
