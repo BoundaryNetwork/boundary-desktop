@@ -4,6 +4,7 @@ import type { ModuleEntry } from "../shared/types";
 import { Icons } from "./components/icons";
 import { navIcon } from "./components/nav-icons";
 import { SettingsModal } from "./components/SettingsModal";
+import { TrafficLights } from "./components/TrafficLights";
 import { runtime } from "./runtime";
 
 /** 基座壳:68px 左导航(顶=账号 + 模块入口、底=基座控件)+ 主区域。
@@ -148,8 +149,21 @@ function LeftRail({
         WebkitUserSelect: "none",
       }}
     >
-      {/* macOS 红绿灯 strip(系统自绘,这里只占位 + 作拖窗区) */}
-      {isMac ? <div className="app-drag" style={{ height: "var(--titlebar-height)", flex: "none" }} /> : null}
+      {/* macOS 红绿灯 strip:整条 drag 作拖窗区,内嵌自绘红绿灯(灯组自带 .no-drag) */}
+      {isMac ? (
+        <div
+          className="app-drag"
+          style={{
+            height: "var(--titlebar-height)",
+            flex: "none",
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: "var(--space-2)",
+          }}
+        >
+          <TrafficLights />
+        </div>
+      ) : null}
 
       {/* 模块入口(profile 已收进系统设置,顶部不再放头像) */}
       <div

@@ -12,8 +12,18 @@ export const IPC = {
   // 壳 → main:把 renderer 才知道的前台选择 / 主题上报给 main 的 surface(驱动 main 模块 view 显隐与主题)
   surfaceForeground: "surface:foreground",
   surfaceTheme: "surface:theme",
+  // 壳 → main:无边框窗口下自绘红绿灯把系统三连键语义经 IPC 暴露
+  windowMinimize: "window:minimize",
+  windowClose: "window:close",
+  windowToggleMaximize: "window:toggleMaximize",
+  windowToggleFullscreen: "window:toggleFullscreen",
+  windowIsFocused: "window:isFocused",
+  windowIsFullscreen: "window:isFullscreen",
   // main → 壳(webContents.send)
   authChanged: "auth:changed",
+  // main → 壳:窗口活跃态 / 全屏态变化,驱动自绘红绿灯
+  windowFocusChange: "window:focus-change",
+  windowFullscreenChange: "window:fullscreen-change",
 
   // main → renderer runtime(webContents.send + reqId,runtime 经 rtReply 回)
   rtActivate: "rt:activate",

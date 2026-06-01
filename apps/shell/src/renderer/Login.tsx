@@ -1,6 +1,7 @@
 import { type CSSProperties, type FormEvent, useState } from "react";
 import { KeyRound, Smartphone } from "lucide-react";
 import { BrandMark } from "./components/BrandMark";
+import { TrafficLights } from "./components/TrafficLights";
 
 /** 登录页:左侧产品展示(cover.png)+ 右侧账户表单。视觉严格参照 openclaw-desktop。
  *  提交经 hostApi.auth.submitLogin → main 校验 → 成功后 main 推 auth:changed,
@@ -23,8 +24,13 @@ export function Login(): JSX.Element {
 
   return (
     <div style={screenStyle}>
-      {/* 顶部拖窗带,避开 macOS 红绿灯 */}
-      <div className="app-drag" aria-hidden="true" style={{ position: "absolute", top: 0, left: 0, right: 0, height: 38, zIndex: 1 }} />
+      {/* 顶部拖窗带 + 自绘红绿灯(无边框窗口) */}
+      <div
+        className="app-drag"
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 38, zIndex: 1, display: "flex", alignItems: "center", paddingLeft: "var(--space-2)" }}
+      >
+        <TrafficLights />
+      </div>
       <div style={showcaseStyle} />
 
       <div style={panelStyle}>

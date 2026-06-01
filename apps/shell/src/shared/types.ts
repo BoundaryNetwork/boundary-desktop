@@ -53,6 +53,17 @@ export interface HostApi {
     reportForeground(id: string | null): Promise<void>;
     reportTheme(theme: "light" | "dark"): Promise<void>;
   };
+  /** 无边框窗口的自绘红绿灯:把系统三连键语义经 IPC 暴露给壳(仅 macOS 用)。 */
+  window: {
+    minimize(): Promise<void>;
+    close(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    toggleFullscreen(): Promise<void>;
+    isFocused(): Promise<boolean>;
+    isFullscreen(): Promise<boolean>;
+    onFocusChange(listener: (focused: boolean) => void): () => void;
+    onFullscreenChange(listener: (fullscreen: boolean) => void): () => void;
+  };
 }
 
 /** renderer runtime(模块宿主)通过 preload 拿到的桥。负责跨进程模块生命周期与 ctx 能力。 */

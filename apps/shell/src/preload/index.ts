@@ -36,6 +36,24 @@ const hostApi: HostApi = {
     reportForeground: (id) => ipcRenderer.invoke(IPC.surfaceForeground, id) as Promise<void>,
     reportTheme: (theme) => ipcRenderer.invoke(IPC.surfaceTheme, theme) as Promise<void>,
   },
+  window: {
+    minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,
+    close: () => ipcRenderer.invoke(IPC.windowClose) as Promise<void>,
+    toggleMaximize: () => ipcRenderer.invoke(IPC.windowToggleMaximize) as Promise<void>,
+    toggleFullscreen: () => ipcRenderer.invoke(IPC.windowToggleFullscreen) as Promise<void>,
+    isFocused: () => ipcRenderer.invoke(IPC.windowIsFocused) as Promise<boolean>,
+    isFullscreen: () => ipcRenderer.invoke(IPC.windowIsFullscreen) as Promise<boolean>,
+    onFocusChange: (listener) => {
+      const handler = (_e: unknown, focused: boolean): void => listener(focused);
+      ipcRenderer.on(IPC.windowFocusChange, handler);
+      return () => ipcRenderer.removeListener(IPC.windowFocusChange, handler);
+    },
+    onFullscreenChange: (listener) => {
+      const handler = (_e: unknown, fs: boolean): void => listener(fs);
+      ipcRenderer.on(IPC.windowFullscreenChange, handler);
+      return () => ipcRenderer.removeListener(IPC.windowFullscreenChange, handler);
+    },
+  },
 };
 
 // main → renderer 请求:跑 handler 后按 reqId 回 rtReply。

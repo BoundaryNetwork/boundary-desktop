@@ -121,6 +121,22 @@ function registerIpc(): void {
   ipcMain.handle(IPC.surfaceForeground, (_e, id: string | null) => surfaces.setForeground(id));
   ipcMain.handle(IPC.surfaceTheme, (_e, theme: "light" | "dark") => surfaces.setTheme(theme));
 
+  // 壳 → main:无边框窗口自绘红绿灯的窗口控制(按事件来源 webContents 定位窗口)。
+  const winOf = (e: { sender: Electron.WebContents }): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(e.sender);
+  ipcMain.handle(IPC.windowMinimize, (e) => winOf(e)?.minimize());
+  ipcMain.handle(IPC.windowClose, (e) => winOf(e)?.close());
+  ipcMain.handle(IPC.windowToggleMaximize, (e) => {
+    const w = winOf(e);
+    if (w) w.isMaximized() ? w.unmaximize() : w.maximize();
+  });
+  ipcMain.handle(IPC.windowToggleFullscreen, (e) => {
+    const w = winOf(e);
+    if (w) w.setFullScreen(!w.isFullScreen());
+  });
+  ipcMain.handle(IPC.windowIsFocused, (e) => winOf(e)?.isFocused() ?? false);
+  ipcMain.handle(IPC.windowIsFullscreen, (e) => winOf(e)?.isFullScreen() ?? false);
+
   // renderer runtime → main:ctx 能力,统一按 aid 取该模块的 main 侧 ctx 执行
   ipcMain.handle(IPC.ctxGetShared, () => shared());
   ipcMain.handle(
@@ -152,11 +168,15 @@ function registerIpc(): void {
 }
 
 function createWindow(): void {
+  const isMac = process.platform === "darwin";
   const win = new BrowserWindow({
     width: 1180,
     height: 760,
     show: false,
-    titleBarStyle: "hiddenInset",
+    // macOS:整窗无边框,渲染端在 LeftRail 顶自绘小号红绿灯(系统红绿灯无法控制大小)。
+    // frame=false + setWindowButtonVisibility(false) 完全接管标题栏视觉;Win/Linux 走系统原生标题栏。
+    frame: isMac ? false : true,
+    titleBarStyle: isMac ? "hidden" : "default",
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/index.mjs"),
       contextIsolation: true,
@@ -165,12 +185,21 @@ function createWindow(): void {
     },
   });
 
+  // 自绘红绿灯:frame=false 仍隐式保留三颗系统按钮,需显式隐藏。
+  if (isMac) win.setWindowButtonVisibility(false);
+
   bridge.attach(win.webContents);
   surfaces.attachWindow(win);
   const subAuth = host.subscribeAuth((state) => {
     win.webContents.send(IPC.authChanged, state); // 壳 UI
     bridge.pushShared(shared()); // 模块 ctx 镜像
   });
+  // 自绘红绿灯依赖窗口活跃 / 全屏态;点内嵌浏览器 view 只让 renderer webContents 失焦、
+  // 窗口本身仍活跃,故用窗口级 focus/blur 事件而非渲染端 window.onblur。
+  win.on("focus", () => win.webContents.send(IPC.windowFocusChange, true));
+  win.on("blur", () => win.webContents.send(IPC.windowFocusChange, false));
+  win.on("enter-full-screen", () => win.webContents.send(IPC.windowFullscreenChange, true));
+  win.on("leave-full-screen", () => win.webContents.send(IPC.windowFullscreenChange, false));
   win.on("closed", () => subAuth.dispose());
   win.once("ready-to-show", () => win.show());
 

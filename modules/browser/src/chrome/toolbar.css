@@ -23,6 +23,14 @@ body {
   position: relative;
 }
 
+/* 无边框窗口拖拽:标签条空白处可拖动窗口;交互元素排除拖拽,保证可点击。 */
+#tab-strip { -webkit-app-region: drag; }
+.tab,
+.tab-group-chip,
+#btn-new-tab,
+#btn-detach-merge,
+#nav-bar { -webkit-app-region: no-drag; }
+
 /* ---------- Tab strip(顶部 40px)---------- */
 #tab-strip {
   display: flex;
