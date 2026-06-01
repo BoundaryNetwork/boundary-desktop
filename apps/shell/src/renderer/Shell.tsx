@@ -64,6 +64,14 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     return () => obs.disconnect();
   }, []);
 
+  // 无边框窗口顶部拖拽:前台是主模块且未分离时(如浏览器内嵌,native tab 条自管拖拽),
+  // 壳不放拖窗带 —— macOS app-region 是 OS 级覆盖层会盖住 native 顶部抢点击。其余情形
+  // (renderer 模块 / 空态 / 主模块已分离的占位)主区顶部无 native 覆盖,需要壳给一条拖窗带。
+  const isMac = window.hostApi.platform === "darwin";
+  const fg = modules.find((m) => m.id === activeId);
+  const fgMainEmbedded = !!fg && fg.runtime === "main" && !detachedIds.has(fg.id);
+  const showDragBand = isMac && !fgMainEmbedded;
+
   return (
     <div
       style={{
@@ -91,6 +99,16 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
         className="content"
         style={{ position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}
       >
+        {/* 主区顶部隐形拖窗带(无边框窗口)。仅在前台无 native 顶部覆盖时铺设;
+            app-region drag 是 OS 级覆盖层、不受 z-index 约束,故只在需要时存在。 */}
+        {showDragBand ? (
+          <div
+            className="app-drag"
+            aria-hidden="true"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, height: "var(--titlebar-height)", zIndex: 2 }}
+          />
+        ) : null}
+
         {/* 主区底部两层流线形状(参照 openclaw App) */}
         <svg
           aria-hidden="true"
@@ -118,8 +136,7 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
           />
         </svg>
 
-        {/* 模块内容浮在装饰流线之上。macOS 红绿灯落在左侧 rail 顶 strip(已预留),
-            主区域不需要单独拖窗带。 */}
+        {/* 模块内容浮在装饰流线之上。macOS 红绿灯落在左侧 rail 顶 strip;主区顶部拖窗带见上。 */}
         <div style={{ position: "relative", zIndex: 1, flex: 1, minHeight: 0 }}>
           {modules.length === 0 ? (
             <div className="content__placeholder" style={{ height: "100%", display: "grid", placeItems: "center" }}>

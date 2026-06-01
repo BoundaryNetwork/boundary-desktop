@@ -4,12 +4,14 @@ import type {
   ModuleUiMeta,
   NetworkState,
   NotifyOptions,
+  Runtime,
 } from "@boundary-desktop/contract";
 
 /** 导航用的模块条目:取自 catalog 的 manifest(激活前即可渲染入口,见 spec 4.2)。 */
 export interface ModuleEntry {
   id: string;
   version: string;
+  runtime: Runtime;
   ui?: ModuleUiMeta;
 }
 
