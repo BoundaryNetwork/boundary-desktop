@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-const EMPTY: ChromeState = { tabs: [], groups: [], activeTabId: null, theme: "light", detached: false };
+const EMPTY: ChromeState = { tabs: [], groups: [], activeTabId: null, theme: "light", detached: false, currentProfile: "默认" };
 
 type Segment = { type: "tab"; tab: TabMeta } | { type: "group"; group: TabGroup; tabs: TabMeta[] };
 
@@ -180,6 +180,19 @@ export function Toolbar(): JSX.Element {
             }}
           />
         </div>
+        <button
+          id="btn-profile"
+          type="button"
+          title={`账号:${state.currentProfile}(点击切换/新建)`}
+          aria-label="账号"
+          onClick={(e) => window.tabAPI.showProfileMenu(Math.round(e.clientX), Math.round(e.clientY))}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" {...S}>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span className="profile-name">{state.currentProfile}</span>
+        </button>
       </div>
     </div>
   );

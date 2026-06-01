@@ -20,6 +20,8 @@ let host: TabViewHost | null = null;
 let runner: Runner | null = null;
 let surface: MainContext["surface"] = undefined;
 let theme: "light" | "dark" = "light";
+let profileSeq = 0;
+const profiles = new Map<string, string>([["default", "默认"]]); // 账号(profile)id → 名;各自分区隔离
 const cleanups: Array<() => void> = [];
 
 export default defineModule<MainContext>({
@@ -123,6 +125,7 @@ export default defineModule<MainContext>({
         store!.dragTab(p.tabId, beforeId, groupId);
       }
     });
+    listen(CH.profileMenu, (e) => chrome(e) && showProfileMenu());
   },
 
   deactivate() {
@@ -165,8 +168,32 @@ function broadcast(): void {
     activeTabId: snap.activeTabId,
     theme,
     detached: surface?.detached.get() ?? false,
+    currentProfile: profiles.get(store.currentProfile()) ?? store.currentProfile(),
   };
   cwc.send(CH.state, state);
+}
+
+/** 账号(profile)切换原生菜单:列出现有账号(✓ 当前)+ 新建账号。新建即切到该账号,
+ *  后续新标签页用其分区(persist:browser-<id>),与其它账号 cookie/storage 隔离。 */
+function showProfileMenu(): void {
+  if (!store) return;
+  const cur = store.currentProfile();
+  const items: MenuItemConstructorOptions[] = [...profiles.entries()].map(([id, name]) => ({
+    label: (id === cur ? "✓ " : "  ") + name,
+    click: () => store?.setCurrentProfile(id),
+  }));
+  items.push(
+    { type: "separator" },
+    {
+      label: "新建账号",
+      click: () => {
+        const id = `profile-${++profileSeq}`;
+        profiles.set(id, `账号 ${profiles.size}`);
+        store?.setCurrentProfile(id);
+      },
+    },
+  );
+  Menu.buildFromTemplate(items).popup();
 }
 
 const COLOR_LABELS: Array<[GroupColor, string]> = [

@@ -27,6 +27,7 @@ export class TabStore {
   #activeId: number | null = null;
   #seq = 0;
   #groupSeq = 0;
+  #currentProfile = "default"; // 新标签页所属账号(profile);各账号 cookie/storage 隔离
   #onChange: () => void;
 
   constructor(onChange: () => void) {
@@ -47,10 +48,21 @@ export class TabStore {
 
   open(url: string): number {
     const id = ++this.#seq;
-    this.#tabs.push({ id, title: "新标签页", url, favicon: "", canGoBack: false, canGoForward: false });
+    this.#tabs.push({
+      id, title: "新标签页", url, favicon: "", canGoBack: false, canGoForward: false, profileId: this.#currentProfile,
+    });
     this.#activeId = id;
     this.#emit();
     return id;
+  }
+
+  currentProfile(): string {
+    return this.#currentProfile;
+  }
+  /** 切换"新标签页所属账号";已存在的标签不动,后续 open 用新账号。 */
+  setCurrentProfile(id: string): void {
+    this.#currentProfile = id;
+    this.#emit();
   }
 
   close(id: number): boolean {

@@ -27,7 +27,7 @@ export class TabViewHost {
   sync(tabs: TabMeta[]): void {
     const live = new Set(tabs.map((t) => t.id));
     for (const id of [...this.#views.keys()]) if (!live.has(id)) this.#destroy(id);
-    for (const t of tabs) if (!this.#views.has(t.id)) this.#create(t.id, t.url);
+    for (const t of tabs) if (!this.#views.has(t.id)) this.#create(t.id, t.url, t.profileId ?? "default");
   }
 
   webContents(id: number | null): WebContents | null {
@@ -50,11 +50,15 @@ export class TabViewHost {
     for (const id of [...this.#views.keys()]) this.#destroy(id);
   }
 
-  #create(id: number, url: string): void {
-    // 浏览器自有持久会话分区:与壳默认 session 隔离(独立 cookie/storage),热拔不污染宿主。
-    // 多账号(per-profile)时改成 `persist:browser-<profileId>` + ctx.storage 存账号元信息(Phase 5 余)。
+  #create(id: number, url: string, profileId: string): void {
+    // 浏览器自有持久会话分区,按账号(profile)隔离 cookie/storage,且与壳默认 session 隔离。
     const view = new WebContentsView({
-      webPreferences: { partition: "persist:browser", contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: {
+        partition: `persist:browser-${profileId}`,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
     });
     view.setBackgroundColor(this.#deps.bg());
     const wc = view.webContents;

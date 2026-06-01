@@ -16,6 +16,7 @@ export const CH = {
   groupCollapse: "browser-chrome:group-collapse", // 点 chip 折叠/展开分组;payload {groupId}
   groupRename: "browser-chrome:group-rename", // 双击 chip 重命名;payload {groupId,name}
   dragTab: "browser-chrome:drag-tab", // 拖拽重排/进出分组;payload {tabId,beforeId,groupId}
+  profileMenu: "browser-chrome:profile-menu", // 点账号按钮 → main 弹原生菜单(切换/新建账号);payload {x,y}
   ready: "browser-chrome:ready", // 页面订阅就绪后拉一次全量态(避开首帧广播早于监听注册的竞态)
   // main → chrome 页(标签列表 + 分组 + 活动标签导航态 + 主题)
   state: "browser-chrome:state",
@@ -41,6 +42,7 @@ export interface TabMeta {
   canGoForward: boolean;
   groupId?: number;
   pinned?: boolean;
+  profileId?: string;
 }
 
 /** main 推给 chrome 页的全量态:标签条渲染 + 分组 + 地址栏/前进后退随活动标签 + 主题。 */
@@ -50,6 +52,8 @@ export interface ChromeState {
   activeTabId: number | null;
   theme: "light" | "dark";
   detached: boolean;
+  /** 当前账号(profile)名,显示在工具栏账号按钮上。 */
+  currentProfile: string;
 }
 
 /** preload 经 contextBridge 暴露给 chrome 页的桥(window.tabAPI)。 */
@@ -71,6 +75,8 @@ export interface TabApi {
   renameGroup(groupId: number, name: string): void;
   /** 拖拽:把 tabId 移到 beforeId 之前(null=末尾),并设其分组(null=无组)。 */
   dragTab(tabId: number, beforeId: number | null, groupId: number | null): void;
+  /** 点账号按钮:请 main 在 (x,y) 弹原生菜单(切换/新建账号)。 */
+  showProfileMenu(x: number, y: number): void;
   /** 订阅就绪后拉一次当前全量态。 */
   ready(): void;
   /** 订阅全量态;返回退订函数。 */

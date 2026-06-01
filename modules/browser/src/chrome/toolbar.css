@@ -144,6 +144,15 @@ body {
 }
 #url-input::placeholder { color: var(--fg-3); }
 
+/* 账号(profile)按钮:图标 + 当前账号名 */
+#btn-profile {
+  flex-shrink: 0; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; margin-left: 2px;
+  border: none; border-radius: var(--r-pill); background: transparent; color: var(--fg-2); cursor: pointer;
+  font-family: inherit; transition: background 0.15s, color 0.15s;
+}
+#btn-profile:hover { background: var(--bg-3); color: var(--fg-0); }
+#btn-profile .profile-name { font-size: var(--text-2); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------- 标签分组(照搬 openclaw)---------- */
 .group-grey { --g: #5f6368; }
 .group-blue { --g: #1a73e8; }
