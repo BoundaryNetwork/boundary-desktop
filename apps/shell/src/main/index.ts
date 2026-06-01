@@ -16,11 +16,16 @@ import { RendererBridge } from "./renderer-bridge.js";
 import { RendererLoader } from "./renderer-loader.js";
 import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
+import { DiskStorageBackend } from "./storage.js";
 
 registerAppScheme(); // 必须在 app ready 前
 
 const authDriver = new ShellAuthDriver();
-const host = new HostServices({ auth: authDriver });
+// 落盘 storage:模块 ctx.storage 跨重启留存(默认内存后端进程退出即丢)。
+const host = new HostServices({
+  auth: authDriver,
+  storage: new DiskStorageBackend(join(app.getPath("userData"), "boundary-storage.json")),
+});
 const bridge = new RendererBridge();
 const surfaces = new SurfaceManager();
 
