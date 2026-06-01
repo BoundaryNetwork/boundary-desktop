@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain, session } from "electron";
 import { HostServices, Registry, startMcpFacade, startWsFacade } from "@boundary-desktop/host";
@@ -221,13 +222,18 @@ void app.whenReady().then(async () => {
   registerIpc();
   createWindow();
 
+  // 门面访问 token:默认随机生成(每次启动新),BOUNDARY_FACADE_TOKEN 可固定(便于配置客户端)。
+  // WS 与 MCP 是同一暴露面,共用同一 token。
+  const facadeToken = process.env.BOUNDARY_FACADE_TOKEN ?? randomBytes(24).toString("hex");
+
   const wsPort = Number(process.env.BOUNDARY_WS_PORT ?? 0);
-  const ws = await startWsFacade(registry.facade(), { port: wsPort });
+  const ws = await startWsFacade(registry.facade(), { port: wsPort, token: facadeToken });
   console.log(`[shell] WS 门面已起:ws://127.0.0.1:${ws.port}`);
 
   const mcpPort = Number(process.env.BOUNDARY_MCP_PORT ?? 0);
-  const mcp = await startMcpFacade(registry.facade(), { port: mcpPort });
+  const mcp = await startMcpFacade(registry.facade(), { port: mcpPort, token: facadeToken });
   console.log(`[shell] MCP 门面已起:http://127.0.0.1:${mcp.port}`);
+  console.log(`[shell] 门面访问 token:${facadeToken}`);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

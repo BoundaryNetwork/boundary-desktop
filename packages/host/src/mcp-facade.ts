@@ -10,7 +10,10 @@ import type { ToolFacade } from "./facade.js";
  *  tools/call / ping,足够标准 MCP HTTP 客户端 list 到 tool 并调用。
  *
  *  无状态意味着不主动推 tools/list_changed —— 故 capabilities.tools 不声明 listChanged,
- *  客户端按需重新 list(热更新后下次 list 即见新集合)。门面只依赖 ToolFacade,不碰
+ *  客户端按需重新 list(热更新后下次 list 即见新集合)。
+ *
+ *  鉴权(opts.token):带 Origin 的请求(浏览器)一律 403、不发 CORS 头(防 localhost CSRF);
+ *  有 token 时要求 Authorization: Bearer <token>,缺/错回 401。门面只依赖 ToolFacade,不碰
  *  模块系统 / 命名空间 / 跨进程路由(与 WS 门面同构)。 */
 export interface McpFacadeHandle {
   port: number;
@@ -28,10 +31,10 @@ const PROTOCOL_VERSION = "2025-06-18";
 
 export function startMcpFacade(
   facade: ToolFacade,
-  opts: { port?: number; host?: string } = {},
+  opts: { port?: number; host?: string; token?: string } = {},
 ): Promise<McpFacadeHandle> {
   return new Promise((resolve, reject) => {
-    const server = createServer((req, res) => void handleHttp(facade, req, res));
+    const server = createServer((req, res) => void handleHttp(facade, req, res, opts.token));
 
     let started = false;
     server.on("error", (err) => {
@@ -51,21 +54,27 @@ function closeServer(server: Server): Promise<void> {
   return new Promise((res) => server.close(() => res()));
 }
 
-async function handleHttp(facade: ToolFacade, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  // CORS:允许浏览器内的 MCP 客户端(如 web 端 agent)跨源访问。
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-session-id, mcp-protocol-version");
-  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-
-  if (req.method === "OPTIONS") {
-    res.writeHead(204).end();
+async function handleHttp(
+  facade: ToolFacade,
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string | undefined,
+): Promise<void> {
+  // 防 DNS rebinding / 浏览器 localhost CSRF:本门面只服务非浏览器 MCP 客户端(它们不带
+  // Origin)。带 Origin 的一律拒,且不发任何 CORS 头(浏览器跨源直接失败)。
+  if (req.headers.origin) {
+    res.writeHead(403).end("Origin not allowed");
     return;
   }
-  // 无状态:不提供服务端发起的 SSE 流。
-  if (req.method === "GET") {
-    res.writeHead(405).end();
-    return;
+  // Bearer token 鉴权(壳启动时注入,默认随机、BOUNDARY_FACADE_TOKEN 可覆盖)。
+  if (token) {
+    const auth = req.headers.authorization ?? "";
+    if (auth !== `Bearer ${token}`) {
+      res.writeHead(401).end("Unauthorized");
+      return;
+    }
   }
+  // 无状态:不提供服务端发起的 SSE 流(GET)。
   if (req.method !== "POST") {
     res.writeHead(405).end();
     return;

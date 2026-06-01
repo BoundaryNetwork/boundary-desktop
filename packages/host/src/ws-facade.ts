@@ -8,7 +8,9 @@ import type { ToolFacade } from "./facade.js";
  *  server → client： { id, type: "result", result } | { id, type: "error", error }
  *  server 推送：      { type: "changed", version }
  *
- *  门面只依赖 ToolFacade，不碰模块系统 / 命名空间 / 跨进程路由。 */
+ *  握手期鉴权(opts.token):带 Origin 的连接(浏览器)一律拒;有 token 时校验
+ *  Authorization: Bearer <token> 头或 ?token= 查询参数。门面只依赖 ToolFacade，
+ *  不碰模块系统 / 命名空间 / 跨进程路由。 */
 export interface WsFacadeHandle {
   port: number;
   close(): Promise<void>;
@@ -23,10 +25,25 @@ interface IncomingMessage {
 
 export function startWsFacade(
   facade: ToolFacade,
-  opts: { port?: number; host?: string } = {},
+  opts: { port?: number; host?: string; token?: string } = {},
 ): Promise<WsFacadeHandle> {
   return new Promise((resolve, reject) => {
-    const wss = new WebSocketServer({ port: opts.port ?? 0, host: opts.host ?? "127.0.0.1" });
+    const token = opts.token;
+    // 握手期鉴权:带 Origin(浏览器)一律拒,防 localhost CSRF;有 token 则校验
+    // Authorization: Bearer <token> 头或 ?token= 查询参数。非浏览器客户端不带 Origin。
+    const verifyClient = (info: { origin?: string; req: { headers: Record<string, unknown>; url?: string } }): boolean => {
+      if (info.origin) return false;
+      if (!token) return true;
+      const auth = String(info.req.headers.authorization ?? "");
+      if (auth === `Bearer ${token}`) return true;
+      try {
+        const q = new URL(info.req.url ?? "/", "http://localhost").searchParams.get("token");
+        return q === token;
+      } catch {
+        return false;
+      }
+    };
+    const wss = new WebSocketServer({ port: opts.port ?? 0, host: opts.host ?? "127.0.0.1", verifyClient });
 
     let started = false;
     wss.on("error", (err) => {
