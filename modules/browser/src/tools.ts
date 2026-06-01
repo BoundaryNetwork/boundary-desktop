@@ -77,11 +77,13 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
     },
     {
       name: "screenshot",
-      description: "截取当前页面,返回 base64 PNG data URL",
+      description: "截取当前页面,作为图片返回(缩放到≤1024宽的 JPEG,省 token)",
       schema: { type: "object", properties: {} },
       handler: async () => {
         const img = await wc().capturePage();
-        return { dataUrl: `data:image/png;base64,${img.toPNG().toString("base64")}` };
+        // 缩到 ≤1024 宽再转 JPEG:原分辨率 PNG 体积巨大;门面据 mimeType 映射成 MCP image 内容。
+        const scaled = img.getSize().width > 1024 ? img.resize({ width: 1024 }) : img;
+        return { mimeType: "image/jpeg", data: scaled.toJPEG(70).toString("base64") };
       },
     },
     {

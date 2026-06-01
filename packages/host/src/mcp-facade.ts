@@ -156,8 +156,7 @@ async function dispatch(facade: ToolFacade, msg: JsonRpcReq): Promise<object | n
         const args = (msg.params?.arguments as unknown) ?? {};
         try {
           const result = await facade.invoke(name, args);
-          const text = typeof result === "string" ? result : JSON.stringify(result);
-          return ok({ content: [{ type: "text", text }] });
+          return ok({ content: toContent(result) });
         } catch (err) {
           // tool 执行错误按 MCP 约定回 isError 的结果(而非协议级 error)
           return ok({ content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }], isError: true });
@@ -170,6 +169,20 @@ async function dispatch(facade: ToolFacade, msg: JsonRpcReq): Promise<object | n
   } catch (err) {
     return fail(-32603, err instanceof Error ? err.message : String(err));
   }
+}
+
+/** 把 tool 返回值映射成 MCP content 块:
+ *  - 字符串 → text;
+ *  - 图片结果 `{ mimeType: "image/*", data: <base64> }` → image(交给视觉模型按图片计 token,
+ *    而非把 base64 当文本塞进上下文撑爆);
+ *  - 其余对象 → JSON 文本。 */
+function toContent(result: unknown): object[] {
+  if (typeof result === "string") return [{ type: "text", text: result }];
+  const r = result as { mimeType?: unknown; data?: unknown } | null;
+  if (r && typeof r.mimeType === "string" && r.mimeType.startsWith("image/") && typeof r.data === "string") {
+    return [{ type: "image", data: r.data, mimeType: r.mimeType }];
+  }
+  return [{ type: "text", text: JSON.stringify(result) }];
 }
 
 function sendJson(res: ServerResponse, status: number, body: object): void {
