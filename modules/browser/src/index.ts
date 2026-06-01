@@ -105,6 +105,16 @@ export default defineModule<MainContext>({
     listen(CH.tabMenu, (e, payload) => {
       if (chrome(e) && payload && typeof payload === "object") showTabMenu((payload as { tabId?: unknown }).tabId);
     });
+    listen(CH.groupCollapse, (e, payload) => {
+      const p = payload as { groupId?: unknown };
+      if (chrome(e) && typeof p?.groupId === "number") {
+        store!.setGroupCollapsed(p.groupId, !store!.groups().find((g) => g.id === p.groupId)?.collapsed);
+      }
+    });
+    listen(CH.groupRename, (e, payload) => {
+      const p = payload as { groupId?: unknown; name?: unknown };
+      if (chrome(e) && typeof p?.groupId === "number" && typeof p?.name === "string") store!.renameGroup(p.groupId, p.name);
+    });
   },
 
   deactivate() {

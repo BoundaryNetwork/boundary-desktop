@@ -85,12 +85,9 @@ export function Toolbar(): JSX.Element {
               <Tab key={seg.tab.id} tab={seg.tab} active={seg.tab.id === state.activeTabId} inGroup={false} />
             ) : (
               <div key={`g${seg.group.id}`} className={`tab-group group-${seg.group.color}`}>
-                <span className="tab-group-chip" title={seg.group.name || "未命名分组"}>
-                  {seg.group.name}
-                </span>
-                {seg.tabs.map((t) => (
-                  <Tab key={t.id} tab={t} active={t.id === state.activeTabId} inGroup />
-                ))}
+                <GroupChip group={seg.group} count={seg.tabs.length} />
+                {!seg.group.collapsed &&
+                  seg.tabs.map((t) => <Tab key={t.id} tab={t} active={t.id === state.activeTabId} inGroup />)}
               </div>
             ),
           )}
@@ -175,6 +172,41 @@ export function Toolbar(): JSX.Element {
         </div>
       </div>
     </div>
+  );
+}
+
+/** 分组 chip:单击折叠/展开,双击重命名(行内 input)。折叠且无名时显示标签数。 */
+function GroupChip({ group, count }: { group: TabGroup; count: number }): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    const commit = (v: string): void => {
+      window.tabAPI.renameGroup(group.id, v.trim());
+      setEditing(false);
+    };
+    return (
+      <input
+        className="tab-group-chip tab-group-chip-input"
+        autoFocus
+        defaultValue={group.name}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
+          else if (e.key === "Escape") setEditing(false);
+        }}
+        onBlur={(e) => commit(e.target.value)}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="tab-group-chip"
+      title={group.name || "未命名分组"}
+      onClick={() => window.tabAPI.toggleGroupCollapse(group.id)}
+      onDoubleClick={() => setEditing(true)}
+    >
+      {group.name || (group.collapsed ? String(count) : "")}
+    </button>
   );
 }
 

@@ -13,6 +13,8 @@ export const CH = {
   detach: "browser-chrome:detach", // 把 surface 分离为独立窗口
   merge: "browser-chrome:merge", // 合并回主窗
   tabMenu: "browser-chrome:tab-menu", // 右键标签 → main 弹原生菜单(含分组操作);payload {tabId,x,y}
+  groupCollapse: "browser-chrome:group-collapse", // 点 chip 折叠/展开分组;payload {groupId}
+  groupRename: "browser-chrome:group-rename", // 双击 chip 重命名;payload {groupId,name}
   ready: "browser-chrome:ready", // 页面订阅就绪后拉一次全量态(避开首帧广播早于监听注册的竞态)
   // main → chrome 页(标签列表 + 分组 + 活动标签导航态 + 主题)
   state: "browser-chrome:state",
@@ -25,6 +27,7 @@ export interface TabGroup {
   id: number;
   name: string;
   color: GroupColor;
+  collapsed?: boolean;
 }
 
 /** 单个标签的展示态(固定/静音/profile 留后续)。 */
@@ -61,6 +64,10 @@ export interface TabApi {
   merge(): void;
   /** 右键标签:请 main 在 (x,y) 弹原生菜单(含分组操作)。 */
   showTabMenu(tabId: number, x: number, y: number): void;
+  /** 点分组 chip:折叠/展开。 */
+  toggleGroupCollapse(groupId: number): void;
+  /** 双击分组 chip 重命名。 */
+  renameGroup(groupId: number, name: string): void;
   /** 订阅就绪后拉一次当前全量态。 */
   ready(): void;
   /** 订阅全量态;返回退订函数。 */

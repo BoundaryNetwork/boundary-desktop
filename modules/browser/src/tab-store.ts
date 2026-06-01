@@ -129,6 +129,24 @@ export class TabStore {
     this.#emit();
   }
 
+  setGroupCollapsed(groupId: number, collapsed: boolean): void {
+    const g = this.#groups.get(groupId);
+    if (!g) return;
+    g.collapsed = collapsed;
+    // 折叠时若活动标签正在该组内,把活动态移到组外的标签(港 openclaw)。
+    if (collapsed && this.#tabs.find((t) => t.id === this.#activeId)?.groupId === groupId) {
+      this.#activeId = this.#tabs.find((t) => t.groupId !== groupId)?.id ?? null;
+    }
+    this.#emit();
+  }
+
+  renameGroup(groupId: number, name: string): void {
+    const g = this.#groups.get(groupId);
+    if (!g) return;
+    g.name = name;
+    this.#emit();
+  }
+
   ungroup(groupId: number): void {
     for (const t of this.#tabs) if (t.groupId === groupId) t.groupId = undefined;
     this.#groups.delete(groupId);
