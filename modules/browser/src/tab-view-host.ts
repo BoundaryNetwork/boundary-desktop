@@ -2,6 +2,21 @@ import { Menu, type MenuItemConstructorOptions, type WebContents, WebContentsVie
 import type { Disposable, Rect } from "@boundary-desktop/contract";
 import type { TabMeta } from "./ipc.js";
 
+const ACCEPT_LANGUAGES = "zh-CN,zh;q=0.9,en;q=0.8";
+
+/** 干净的桌面 Chrome UA:去掉默认 Electron UA 里的 `Electron/x` 与 app product token
+ *  (`<name>/<ver>`,位于 "(KHTML, like Gecko)" 与 "Chrome/" 之间)。否则反爬一眼识别
+ *  "Electron" / 自定义应用名,判为机器人(unusual traffic)。Chrome 版本保留真实值,
+ *  与 userAgentData / 引擎一致,避免不自洽反成新特征。 */
+let cleanUA: string | null = null;
+function contentUserAgent(): string {
+  if (cleanUA) return cleanUA;
+  cleanUA = app.userAgentFallback
+    .replace(/ Electron\/[\d.]+/, "")
+    .replace(/(\(KHTML, like Gecko\)) \S+ (Chrome\/)/, "$1 $2");
+  return cleanUA;
+}
+
 interface HostDeps {
   /** 把 view 挂到框架区域(= surface.attach);返回的句柄在标签销毁时 dispose(摘除)。 */
   attach: (view: object) => Disposable;
@@ -62,6 +77,9 @@ export class TabViewHost {
     });
     view.setBackgroundColor(this.#deps.bg());
     const wc = view.webContents;
+    // 反爬基本款:内容视图伪装成普通桌面 Chrome(去 Electron/app token),Accept-Language 设 zh-CN。
+    // 设在分区 session 上(UA + Accept-Language 一起),loadURL 前生效、覆盖该 profile 全部标签。
+    wc.session.setUserAgent(contentUserAgent(), ACCEPT_LANGUAGES);
     const nav = (): void => this.#deps.onNav(id, navPatch(wc));
     wc.on("did-navigate", nav);
     wc.on("did-navigate-in-page", nav);
