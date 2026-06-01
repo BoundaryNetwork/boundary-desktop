@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { ChromeState, TabApi, TabMeta } from "../ipc";
+import type { ChromeState, TabApi, TabGroup, TabMeta } from "../ipc";
 
 declare global {
   interface Window {
@@ -7,7 +7,26 @@ declare global {
   }
 }
 
-const EMPTY: ChromeState = { tabs: [], activeTabId: null, theme: "light", detached: false };
+const EMPTY: ChromeState = { tabs: [], groups: [], activeTabId: null, theme: "light", detached: false };
+
+type Segment = { type: "tab"; tab: TabMeta } | { type: "group"; group: TabGroup; tabs: TabMeta[] };
+
+/** 把(已保证同组连续的)标签序列切成 段:无组标签各自一段,连续同组标签合成一个分组段。 */
+function buildSegments(tabs: TabMeta[], groups: TabGroup[]): Segment[] {
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const segs: Segment[] = [];
+  for (const t of tabs) {
+    const g = t.groupId != null ? byId.get(t.groupId) : undefined;
+    const last = segs[segs.length - 1];
+    if (g) {
+      if (last && last.type === "group" && last.group.id === g.id) last.tabs.push(t);
+      else segs.push({ type: "group", group: g, tabs: [t] });
+    } else {
+      segs.push({ type: "tab", tab: t });
+    }
+  }
+  return segs;
+}
 
 /** 地址栏输入归一成可导航 URL:有 scheme 直接用;像域名补 https://;其余当搜索词。 */
 function toUrl(input: string): string {
@@ -52,9 +71,20 @@ export function Toolbar(): JSX.Element {
     <div id="toolbar">
       <div id="tab-strip">
         <div id="tabs">
-          {state.tabs.map((t) => (
-            <Tab key={t.id} tab={t} active={t.id === state.activeTabId} />
-          ))}
+          {buildSegments(state.tabs, state.groups).map((seg) =>
+            seg.type === "tab" ? (
+              <Tab key={seg.tab.id} tab={seg.tab} active={seg.tab.id === state.activeTabId} inGroup={false} />
+            ) : (
+              <div key={`g${seg.group.id}`} className={`tab-group group-${seg.group.color}`}>
+                <span className="tab-group-chip" title={seg.group.name || "未命名分组"}>
+                  {seg.group.name}
+                </span>
+                {seg.tabs.map((t) => (
+                  <Tab key={t.id} tab={t} active={t.id === state.activeTabId} inGroup />
+                ))}
+              </div>
+            ),
+          )}
         </div>
         <button id="btn-new-tab" type="button" title="新建标签页" aria-label="新建标签页" onClick={() => window.tabAPI.newTab()}>
           <svg viewBox="0 0 24 24" width="14" height="14" {...S}>
@@ -139,9 +169,18 @@ export function Toolbar(): JSX.Element {
   );
 }
 
-function Tab({ tab, active }: { tab: TabMeta; active: boolean }): JSX.Element {
+function Tab({ tab, active, inGroup }: { tab: TabMeta; active: boolean; inGroup: boolean }): JSX.Element {
+  const cls = "tab" + (active ? " active" : "") + (inGroup ? " in-group" : "");
   return (
-    <div className={active ? "tab active" : "tab"} title={tab.title || tab.url} onClick={() => window.tabAPI.switchTab(tab.id)}>
+    <div
+      className={cls}
+      title={tab.title || tab.url}
+      onClick={() => window.tabAPI.switchTab(tab.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        window.tabAPI.showTabMenu(tab.id, Math.round(e.clientX), Math.round(e.clientY));
+      }}
+    >
       {tab.favicon ? (
         <img className="tab-favicon" src={tab.favicon} alt="" />
       ) : (

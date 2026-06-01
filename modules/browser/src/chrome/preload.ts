@@ -32,6 +32,7 @@ const api: TabApi = {
   closeTab: (id) => ipcRenderer.send(CH.closeTab, id),
   detach: () => ipcRenderer.send(CH.detach),
   merge: () => ipcRenderer.send(CH.merge),
+  showTabMenu: (tabId, x, y) => ipcRenderer.send(CH.tabMenu, { tabId, x, y }),
   ready: () => ipcRenderer.send(CH.ready),
   onState: (cb) => {
     const h = (_e: unknown, s: ChromeState): void => cb(s);

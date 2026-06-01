@@ -140,3 +140,52 @@ body {
   font-size: var(--text-3); min-width: 0;
 }
 #url-input::placeholder { color: var(--fg-3); }
+
+/* ---------- 标签分组(照搬 openclaw)---------- */
+.group-grey { --g: #5f6368; }
+.group-blue { --g: #1a73e8; }
+.group-red { --g: #d93025; }
+.group-green { --g: #1e8e3e; }
+.group-yellow { --g: #f9ab00; }
+.group-pink { --g: #d01884; }
+.group-purple { --g: #9334e6; }
+.group-cyan { --g: #007b83; }
+.group-orange { --g: #fa903e; }
+
+.tab-group {
+  position: relative; display: flex; align-items: flex-end; align-self: flex-end; gap: 2px; height: 100%;
+  padding: 6px 8px 0; flex-shrink: 1; min-width: 0; border-radius: 9px 9px 0 0;
+  background: color-mix(in srgb, var(--g) 14%, transparent);
+}
+/* 底部彩色线;active 标签 z-index:1 盖住,使底线在其位置断开 */
+.tab-group::after {
+  content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--g);
+  z-index: 0; pointer-events: none;
+}
+.tab-group-chip {
+  align-self: center; height: 20px; display: flex; align-items: center; flex-shrink: 0; min-width: 20px;
+  max-width: 140px; line-height: 20px; padding: 0 8px; border: none; border-radius: 4px; background: var(--g);
+  color: #fff; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tab-group-chip:empty { min-width: 10px; padding: 0 6px; }
+
+.tab.in-group { background: color-mix(in srgb, var(--g) 8%, var(--bg-1)); }
+.tab.in-group:hover:not(.active) { background: color-mix(in srgb, var(--g) 18%, var(--bg-1)); }
+.tab.in-group.active {
+  position: relative; z-index: 1; background: var(--bg-1);
+  box-shadow: inset 2px 0 0 var(--g), inset -2px 0 0 var(--g), inset 0 2px 0 var(--g);
+}
+/* 组内 active 标签底部两侧逆向圆角 + 主题色描边(对齐 Chrome 分组) */
+.tab.in-group.active::before, .tab.in-group.active::after { width: 11px; height: 10px; }
+.tab.in-group.active::before {
+  left: -8px;
+  background:
+    radial-gradient(circle at 0% 0%, transparent 9.4px, var(--bg-1) 10px),
+    radial-gradient(circle at 0% 0%, transparent 7.6px, var(--g) 8px);
+}
+.tab.in-group.active::after {
+  right: -8px;
+  background:
+    radial-gradient(circle at 100% 0%, transparent 9.4px, var(--bg-1) 10px),
+    radial-gradient(circle at 100% 0%, transparent 7.6px, var(--g) 8px);
+}

@@ -3,9 +3,9 @@
 // Phase 2b:多标签(TabStore + TabViewHost)+ 标签条 + 地址栏导航。CDP/工具/自动化留后续。
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, type WebContents, WebContentsView, ipcMain } from "electron";
+import { Menu, type MenuItemConstructorOptions, app, type WebContents, WebContentsView, ipcMain } from "electron";
 import { defineModule, type Disposable, type MainContext, type Rect } from "@boundary-desktop/contract";
-import { CH, type ChromeState, type TabMeta } from "./ipc.js";
+import { CH, type ChromeState, type GroupColor, type TabMeta } from "./ipc.js";
 import { TabStore } from "./tab-store.js";
 import { TabViewHost } from "./tab-view-host.js";
 import { browserTools } from "./tools.js";
@@ -102,6 +102,9 @@ export default defineModule<MainContext>({
     });
     listen(CH.detach, (e) => chrome(e) && void s.detach());
     listen(CH.merge, (e) => chrome(e) && void s.merge());
+    listen(CH.tabMenu, (e, payload) => {
+      if (chrome(e) && payload && typeof payload === "object") showTabMenu((payload as { tabId?: unknown }).tabId);
+    });
   },
 
   deactivate() {
@@ -140,11 +143,47 @@ function broadcast(): void {
   const snap = store.snapshot();
   const state: ChromeState = {
     tabs: snap.tabs as TabMeta[],
+    groups: snap.groups,
     activeTabId: snap.activeTabId,
     theme,
     detached: surface?.detached.get() ?? false,
   };
   cwc.send(CH.state, state);
+}
+
+const COLOR_LABELS: Array<[GroupColor, string]> = [
+  ["blue", "蓝"], ["red", "红"], ["orange", "橙"], ["yellow", "黄"], ["green", "绿"],
+  ["cyan", "青"], ["purple", "紫"], ["pink", "粉"], ["grey", "灰"],
+];
+
+/** 右键标签:原生菜单(含分组操作)。原生 Menu 浮于 OS 层,不被 88px 工具栏条裁剪。 */
+function showTabMenu(tabId: unknown): void {
+  if (typeof tabId !== "number" || !store) return;
+  const gid = store.groupOf(tabId);
+  const items: MenuItemConstructorOptions[] = [];
+  if (gid == null) {
+    items.push({ label: "加入新分组", click: () => store?.createGroupFromTab(tabId) });
+    const others = store.groups();
+    if (others.length) {
+      items.push({
+        label: "加入分组",
+        submenu: others.map((g) => ({
+          label: g.name || `分组 ${g.id}`,
+          click: () => store?.addToGroup(tabId, g.id),
+        })),
+      });
+    }
+  } else {
+    items.push({ label: "移出分组", click: () => store?.removeFromGroup(tabId) });
+    items.push({
+      label: "分组颜色",
+      submenu: COLOR_LABELS.map(([c, label]) => ({ label, click: () => store?.setGroupColor(gid, c) })),
+    });
+    items.push({ label: "取消分组", click: () => store?.ungroup(gid) });
+    items.push({ label: "关闭分组", click: () => store?.closeGroup(gid) && store?.open("") });
+  }
+  items.push({ type: "separator" }, { label: "关闭标签", click: () => store?.close(tabId) && store?.open("") });
+  Menu.buildFromTemplate(items).popup();
 }
 
 function active(): WebContents | null {

@@ -1,57 +1,148 @@
-import type { TabMeta } from "./ipc.js";
+import type { GroupColor, TabGroup, TabMeta } from "./ipc.js";
 
-/** 标签状态(纯数据 + 动作)。view/webContents 由 TabViewHost 据本 store 快照 diff 出来,
- *  两者解耦:store 只管"有哪些标签、哪个活动",不碰 native。每次变更触发 onChange。 */
+const GROUP_COLORS: GroupColor[] = ["blue", "red", "orange", "yellow", "green", "cyan", "purple", "pink", "grey"];
+
+/** 同组标签拉成连续(对标 Chrome,否则渲染端把一个组拆成多段彩条):每个组在其首个成员
+ *  出现的位置就地展开全部成员,无组标签留原位。稳定、幂等。(港 openclaw enforceGroupContiguity) */
+function enforceGroupContiguity(tabs: TabMeta[]): TabMeta[] {
+  const result: TabMeta[] = [];
+  const placed = new Set<number>();
+  for (const t of tabs) {
+    if (t.groupId == null) {
+      result.push(t);
+      continue;
+    }
+    if (placed.has(t.groupId)) continue;
+    placed.add(t.groupId);
+    for (const o of tabs) if (o.groupId === t.groupId) result.push(o);
+  }
+  return result;
+}
+
+/** 标签状态(纯数据 + 动作)+ 分组。view/webContents 由 TabViewHost 据快照 diff 出来。
+ *  每次变更先把同组标签拉连续,再触发 onChange。 */
 export class TabStore {
   #tabs: TabMeta[] = [];
+  #groups = new Map<number, TabGroup>();
   #activeId: number | null = null;
   #seq = 0;
+  #groupSeq = 0;
   #onChange: () => void;
 
   constructor(onChange: () => void) {
     this.#onChange = onChange;
   }
 
-  snapshot(): { tabs: TabMeta[]; activeTabId: number | null } {
-    return { tabs: this.#tabs.map((t) => ({ ...t })), activeTabId: this.#activeId };
+  snapshot(): { tabs: TabMeta[]; groups: TabGroup[]; activeTabId: number | null } {
+    return {
+      tabs: this.#tabs.map((t) => ({ ...t })),
+      groups: [...this.#groups.values()],
+      activeTabId: this.#activeId,
+    };
   }
 
   activeId(): number | null {
     return this.#activeId;
   }
 
-  /** 新建标签并设为活动;返回其 id。url 为初始地址(空=新标签页)。 */
   open(url: string): number {
     const id = ++this.#seq;
     this.#tabs.push({ id, title: "新标签页", url, favicon: "", canGoBack: false, canGoForward: false });
     this.#activeId = id;
-    this.#onChange();
+    this.#emit();
     return id;
   }
 
-  /** 关闭标签;若关掉的是活动标签,活动态落到相邻标签。返回关闭后是否已无标签。 */
   close(id: number): boolean {
     const i = this.#tabs.findIndex((t) => t.id === id);
     if (i < 0) return this.#tabs.length === 0;
+    const groupId = this.#tabs[i]!.groupId;
     this.#tabs.splice(i, 1);
-    if (this.#activeId === id) {
-      this.#activeId = this.#tabs[i]?.id ?? this.#tabs[i - 1]?.id ?? null;
-    }
-    this.#onChange();
+    if (this.#activeId === id) this.#activeId = this.#tabs[i]?.id ?? this.#tabs[i - 1]?.id ?? null;
+    if (groupId != null) this.#pruneGroup(groupId);
+    this.#emit();
     return this.#tabs.length === 0;
   }
 
   switch(id: number): void {
     if (this.#activeId === id || !this.#tabs.some((t) => t.id === id)) return;
     this.#activeId = id;
-    this.#onChange();
+    this.#emit();
   }
 
-  /** 合并某标签的导航态(来自其 webContents 事件)。 */
   update(id: number, patch: Partial<Omit<TabMeta, "id">>): void {
     const t = this.#tabs.find((t) => t.id === id);
     if (!t) return;
     Object.assign(t, patch);
+    this.#emit();
+  }
+
+  // --- 分组 ---
+
+  createGroupFromTab(tabId: number): void {
+    const t = this.#tabs.find((t) => t.id === tabId);
+    if (!t) return;
+    const id = ++this.#groupSeq;
+    this.#groups.set(id, { id, name: "", color: GROUP_COLORS[(id - 1) % GROUP_COLORS.length]! });
+    t.groupId = id;
+    this.#emit();
+  }
+
+  addToGroup(tabId: number, groupId: number): void {
+    const t = this.#tabs.find((t) => t.id === tabId);
+    if (!t || !this.#groups.has(groupId)) return;
+    const old = t.groupId;
+    t.groupId = groupId;
+    if (old != null && old !== groupId) this.#pruneGroup(old);
+    this.#emit();
+  }
+
+  removeFromGroup(tabId: number): void {
+    const t = this.#tabs.find((t) => t.id === tabId);
+    if (!t || t.groupId == null) return;
+    const old = t.groupId;
+    t.groupId = undefined;
+    this.#pruneGroup(old);
+    this.#emit();
+  }
+
+  setGroupColor(groupId: number, color: GroupColor): void {
+    const g = this.#groups.get(groupId);
+    if (!g) return;
+    g.color = color;
+    this.#emit();
+  }
+
+  ungroup(groupId: number): void {
+    for (const t of this.#tabs) if (t.groupId === groupId) t.groupId = undefined;
+    this.#groups.delete(groupId);
+    this.#emit();
+  }
+
+  closeGroup(groupId: number): boolean {
+    this.#tabs = this.#tabs.filter((t) => t.groupId !== groupId);
+    this.#groups.delete(groupId);
+    if (this.#activeId != null && !this.#tabs.some((t) => t.id === this.#activeId)) {
+      this.#activeId = this.#tabs[this.#tabs.length - 1]?.id ?? null;
+    }
+    this.#emit();
+    return this.#tabs.length === 0;
+  }
+
+  /** 给某标签弹原生右键菜单用:列出当前其它分组(供"加入分组")。 */
+  groups(): TabGroup[] {
+    return [...this.#groups.values()];
+  }
+  groupOf(tabId: number): number | undefined {
+    return this.#tabs.find((t) => t.id === tabId)?.groupId;
+  }
+
+  #pruneGroup(groupId: number): void {
+    if (!this.#tabs.some((t) => t.groupId === groupId)) this.#groups.delete(groupId);
+  }
+
+  #emit(): void {
+    this.#tabs = enforceGroupContiguity(this.#tabs);
     this.#onChange();
   }
 }
