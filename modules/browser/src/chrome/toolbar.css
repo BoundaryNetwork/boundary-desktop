@@ -105,6 +105,9 @@ body {
 .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
 .tab-close:hover { background: var(--bg-4); color: var(--fg-0); }
 
+/* 固定标签:favicon-only,固定 34px,恒最左 */
+.tab.pinned { flex: 0 0 34px; min-width: 0; max-width: none; width: 34px; padding: 0; gap: 0; justify-content: center; }
+
 #btn-new-tab, #btn-detach-merge {
   flex-shrink: 0; width: 28px; height: 28px; margin-bottom: 4px; border: none; background: transparent;
   color: var(--fg-2); cursor: pointer; display: flex; align-items: center; justify-content: center;

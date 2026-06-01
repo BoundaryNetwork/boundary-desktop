@@ -36,6 +36,7 @@ export interface TabMeta {
   canGoBack: boolean;
   canGoForward: boolean;
   groupId?: number;
+  pinned?: boolean;
 }
 
 /** main 推给 chrome 页的全量态:标签条渲染 + 分组 + 地址栏/前进后退随活动标签 + 主题。 */

@@ -106,6 +106,22 @@ export class TabStore {
     this.#emit();
   }
 
+  setPinned(id: number, pinned: boolean): void {
+    const t = this.#tabs.find((t) => t.id === id);
+    if (!t) return;
+    t.pinned = pinned;
+    if (pinned && t.groupId != null) {
+      const old = t.groupId;
+      t.groupId = undefined; // 固定标签不参与分组
+      this.#pruneGroup(old);
+    }
+    this.#emit();
+  }
+
+  pinnedOf(id: number): boolean {
+    return this.#tabs.find((t) => t.id === id)?.pinned ?? false;
+  }
+
   setGroupColor(groupId: number, color: GroupColor): void {
     const g = this.#groups.get(groupId);
     if (!g) return;
@@ -142,7 +158,10 @@ export class TabStore {
   }
 
   #emit(): void {
-    this.#tabs = enforceGroupContiguity(this.#tabs);
+    // 固定标签恒最左、不参与分组;其余拉同组连续。(港 openclaw emitChange 排序)
+    const pinned = this.#tabs.filter((t) => t.pinned);
+    const rest = this.#tabs.filter((t) => !t.pinned);
+    this.#tabs = [...pinned, ...enforceGroupContiguity(rest)];
     this.#onChange();
   }
 }

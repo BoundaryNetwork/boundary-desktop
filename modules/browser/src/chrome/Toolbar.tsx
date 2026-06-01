@@ -71,7 +71,16 @@ export function Toolbar(): JSX.Element {
     <div id="toolbar">
       <div id="tab-strip">
         <div id="tabs">
-          {buildSegments(state.tabs, state.groups).map((seg) =>
+          {/* 固定标签:恒最左,favicon-only */}
+          {state.tabs
+            .filter((t) => t.pinned)
+            .map((t) => (
+              <Tab key={t.id} tab={t} active={t.id === state.activeTabId} inGroup={false} />
+            ))}
+          {buildSegments(
+            state.tabs.filter((t) => !t.pinned),
+            state.groups,
+          ).map((seg) =>
             seg.type === "tab" ? (
               <Tab key={seg.tab.id} tab={seg.tab} active={seg.tab.id === state.activeTabId} inGroup={false} />
             ) : (
@@ -170,11 +179,11 @@ export function Toolbar(): JSX.Element {
 }
 
 function Tab({ tab, active, inGroup }: { tab: TabMeta; active: boolean; inGroup: boolean }): JSX.Element {
-  const cls = "tab" + (active ? " active" : "") + (inGroup ? " in-group" : "");
+  const cls = "tab" + (active ? " active" : "") + (inGroup ? " in-group" : "") + (tab.pinned ? " pinned" : "");
   return (
     <div
       className={cls}
-      title={tab.title || tab.url}
+      title={tab.pinned ? tab.title || tab.url : tab.title || tab.url}
       onClick={() => window.tabAPI.switchTab(tab.id)}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -192,18 +201,21 @@ function Tab({ tab, active, inGroup }: { tab: TabMeta; active: boolean; inGroup:
           </svg>
         </span>
       )}
-      <span className="tab-title">{tab.title || "新标签页"}</span>
-      <button
-        className="tab-close"
-        type="button"
-        aria-label="关闭标签页"
-        onClick={(e) => {
-          e.stopPropagation();
-          window.tabAPI.closeTab(tab.id);
-        }}
-      >
-        ×
-      </button>
+      {/* 固定标签只剩 favicon(无标题/关闭),宽度收成 34px */}
+      {!tab.pinned && <span className="tab-title">{tab.title || "新标签页"}</span>}
+      {!tab.pinned && (
+        <button
+          className="tab-close"
+          type="button"
+          aria-label="关闭标签页"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.tabAPI.closeTab(tab.id);
+          }}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }

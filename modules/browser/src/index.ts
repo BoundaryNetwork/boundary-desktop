@@ -182,7 +182,10 @@ function showTabMenu(tabId: unknown): void {
     items.push({ label: "取消分组", click: () => store?.ungroup(gid) });
     items.push({ label: "关闭分组", click: () => store?.closeGroup(gid) && store?.open("") });
   }
-  items.push({ type: "separator" }, { label: "关闭标签", click: () => store?.close(tabId) && store?.open("") });
+  const pinned = store.pinnedOf(tabId);
+  items.push({ type: "separator" });
+  items.push({ label: pinned ? "取消固定" : "固定标签", click: () => store?.setPinned(tabId, !pinned) });
+  items.push({ label: "关闭标签", click: () => store?.close(tabId) && store?.open("") });
   Menu.buildFromTemplate(items).popup();
 }
 
