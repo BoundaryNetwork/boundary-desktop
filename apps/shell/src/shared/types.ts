@@ -13,6 +13,8 @@ export interface ModuleEntry {
   version: string;
   runtime: Runtime;
   ui?: ModuleUiMeta;
+  /** host 开机自动激活的常驻模块:其生命周期归 host,渲染端只前台显隐、不再 activate/deactivate。 */
+  autostart?: boolean;
 }
 
 /** 渲染层共享状态镜像:main 是权威,经 IPC 种子 + 推送同步给 renderer,

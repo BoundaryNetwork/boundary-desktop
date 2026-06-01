@@ -123,7 +123,7 @@ function registerIpc(): void {
   // 壳 → main:模块导航与激活
   ipcMain.handle(IPC.modulesList, async (): Promise<ModuleEntry[]> => {
     const catalog = await source.catalog();
-    return catalog.modules.map((m) => ({ id: m.id, version: m.version, runtime: m.runtime, ui: m.ui }));
+    return catalog.modules.map((m) => ({ id: m.id, version: m.version, runtime: m.runtime, ui: m.ui, autostart: m.autostart }));
   });
   // 按 id 串行化 activate/deactivate:check-then-act 跨 await 不原子(StrictMode 双调
   // effect、快速点击会并发),串行 + 意图幂等才不会撞 Registry 的"已安装"等不变量。

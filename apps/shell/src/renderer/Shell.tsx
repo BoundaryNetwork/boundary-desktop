@@ -315,6 +315,13 @@ function ModuleView({
   const [err, setErr] = useState("");
 
   useEffect(() => {
+    // autostart 模块由 host 独占生命周期(开机即激活):渲染端绝不能再 activate/deactivate,
+    // 否则会与 host 的激活叠加 + StrictMode 的 mount→unmount→mount 抖动,导致模块重复激活、
+    // 模块级 store/view 被覆盖泄漏(navigate 与后续 eval/click 落到不同标签)。这里只占位、随前台显隐。
+    if (entry.autostart) {
+      setPhase("ready");
+      return;
+    }
     runtime.setContainer(entry.id, ref.current);
     setPhase("loading");
     setErr("");
