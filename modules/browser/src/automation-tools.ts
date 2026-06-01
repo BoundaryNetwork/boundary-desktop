@@ -13,7 +13,7 @@ interface Deps {
   runner: Runner;
 }
 
-/** 概要:不回全量 output(键名即可),避免把采集数据塞爆调用方上下文。 */
+/** 概要:各 sessionKey 条数 + context 键名 + csv 文件路径,不回全量数据,避免塞爆调用方上下文。 */
 function summary(r: RunRecord): object {
   return {
     runId: r.runId,
@@ -21,10 +21,25 @@ function summary(r: RunRecord): object {
     status: r.status,
     step: r.step,
     total: r.total,
-    outputKeys: r.output ? Object.keys(r.output) : [],
+    sessions: r.sessions ?? {},
+    contextKeys: r.output?.context ? Object.keys(r.output.context) : [],
+    outputFiles: r.outputFiles ?? [],
     outputFile: r.outputFile,
     message: r.message,
   };
+}
+
+/** 有界样本:每 session 最多 perSession 条(全量在 csv / <runId>.json),供 result 与 run 完成回。 */
+function sample(r: RunRecord, perSession = 15): object {
+  const out = r.output ?? { context: {}, sessions: {} };
+  let truncated = false;
+  const sessions: Record<string, unknown[]> = {};
+  for (const [k, v] of Object.entries(out.sessions ?? {})) {
+    const arr = Array.isArray(v) ? v : [];
+    if (arr.length > perSession) truncated = true;
+    sessions[k] = arr.slice(0, perSession);
+  }
+  return { ...summary(r), sample: { context: out.context ?? {}, sessions }, truncated };
 }
 
 const str = (a: unknown, k: string): string | undefined => {
@@ -74,7 +89,7 @@ export function automationTools(deps: Deps): ToolDefinition[] {
           new Promise<"timeout">((r) => setTimeout(() => r("timeout"), SYNC_WINDOW)),
         ]);
         return raced === "done"
-          ? { ...summary(record), output: record.output, dataDir: deps.runner.dataDir() }
+          ? { ...sample(record), dataDir: deps.runner.dataDir() }
           : { ...summary(record), dataDir: deps.runner.dataDir() };
       },
     },
@@ -86,12 +101,9 @@ export function automationTools(deps: Deps): ToolDefinition[] {
     },
     {
       name: "automation_result",
-      description: "读取 run 的采集结果(全量 output)",
+      description: "读取 run 的采集结果(有界样本;全量见 dataDir 下 csv / <runId>.json)",
       schema: { type: "object", required: ["runId"], properties: { runId: { type: "string" } } },
-      handler: async (a) => {
-        const r = requireRun(a);
-        return { ...summary(r), output: r.output ?? null, dataDir: deps.runner.dataDir() };
-      },
+      handler: async (a) => ({ ...sample(requireRun(a)), dataDir: deps.runner.dataDir() }),
     },
     {
       name: "automation_runs",

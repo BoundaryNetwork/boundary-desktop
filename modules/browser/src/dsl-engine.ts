@@ -4,7 +4,8 @@
 import type { WebContents } from "electron";
 import { click, findElement, moveTo, scroll, setInputFiles, typeText, type ElementTarget } from "./automation.js";
 import { buildContext, resolveVariables } from "./vars.js";
-import type { AutomationScript, AutomationStep } from "./script-types.js";
+import { SessionCollector, attachCapture } from "./session-capture.js";
+import type { AutomationScript, AutomationStep, SessionSpec } from "./script-types.js";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
@@ -14,34 +15,55 @@ export interface EngineDeps {
   onStep: (i: number) => void;
 }
 
-/** 顺序执行脚本步骤,返回累积上下文。 */
+/** 跨步骤的采集态:sessionCapture 建 collector + 挂 Network 拦截,scrollForSession/transform 复用。 */
+interface Capture {
+  collector: SessionCollector | null;
+  detach: (() => void) | null;
+}
+
+export interface RunOutput {
+  context: Record<string, unknown>;
+  sessions: Record<string, Record<string, unknown>[]>;
+}
+
+/** 顺序执行脚本步骤,返回 { context(extract/execute 产物), sessions(采集行) }。 */
 export async function runScript(
   script: AutomationScript,
   vars: Record<string, unknown>,
   deps: EngineDeps,
-): Promise<Record<string, unknown>> {
+): Promise<RunOutput> {
   const ctx = buildContext(script.contextSetup, vars);
   const steps = resolveVariables(script.steps, vars);
   const wc = deps.active();
   if (!wc || wc.isDestroyed()) throw new Error("无活动标签");
+  const cap: Capture = { collector: null, detach: null };
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i]!;
-    if (step.when && !ctx[step.when]) continue;
-    deps.onStep(i);
-    await runStepWithRetry(wc, step, ctx);
-    const pw = step.postWait ?? [400, 900];
-    await sleep(Array.isArray(pw) ? rand(pw[0]!, pw[1]!) : pw);
+  try {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]!;
+      if (step.when && !ctx[step.when]) continue;
+      deps.onStep(i);
+      await runStepWithRetry(wc, step, ctx, cap);
+      const pw = step.postWait ?? [400, 900];
+      await sleep(Array.isArray(pw) ? rand(pw[0]!, pw[1]!) : pw);
+    }
+  } finally {
+    cap.detach?.();
   }
-  return ctx;
+  return { context: ctx, sessions: cap.collector ? cap.collector.all() : {} };
 }
 
-async function runStepWithRetry(wc: WebContents, step: AutomationStep, ctx: Record<string, unknown>): Promise<void> {
+async function runStepWithRetry(
+  wc: WebContents,
+  step: AutomationStep,
+  ctx: Record<string, unknown>,
+  cap: Capture,
+): Promise<void> {
   const max = step.retry ?? 0;
   let last: Error | undefined;
   for (let i = 0; i <= max; i++) {
     try {
-      await exec(wc, step, ctx);
+      await exec(wc, step, ctx, cap);
       return;
     } catch (err) {
       last = err as Error;
@@ -60,7 +82,7 @@ async function runStepWithRetry(wc: WebContents, step: AutomationStep, ctx: Reco
   throw last;
 }
 
-async function exec(wc: WebContents, step: AutomationStep, ctx: Record<string, unknown>): Promise<void> {
+async function exec(wc: WebContents, step: AutomationStep, ctx: Record<string, unknown>, cap: Capture): Promise<void> {
   const target = (step.target ?? {}) as ElementTarget;
   switch (step.action) {
     case "wait": {
@@ -96,8 +118,7 @@ async function exec(wc: WebContents, step: AutomationStep, ctx: Record<string, u
         await scrollToElement(wc, target);
       } else {
         const dy = Number((step.params as { deltaY?: unknown } | undefined)?.deltaY ?? step.value ?? 600);
-        const { w, h } = await viewport(wc);
-        await scroll(wc, Math.round(w / 2), Math.round(h / 2), Number.isFinite(dy) ? dy : 600);
+        await scrollBy(wc, Number.isFinite(dy) ? dy : 600);
       }
       return;
     }
@@ -144,12 +165,64 @@ async function exec(wc: WebContents, step: AutomationStep, ctx: Record<string, u
       ctx[spec.key ?? "value"] = await wc.executeJavaScript(code);
       return;
     }
+    case "sessionCapture": {
+      const p = (step.params ?? {}) as Record<string, unknown>;
+      let specs: SessionSpec[] = Array.isArray(p.sessionList)
+        ? (p.sessionList as SessionSpec[])
+        : [p as unknown as SessionSpec];
+      specs = specs.filter((s) => !s.when || ctx[s.when]);
+      cap.detach?.(); // 重复 sessionCapture 先解绑前次
+      cap.collector = new SessionCollector(specs);
+      cap.detach = attachCapture(wc, cap.collector);
+      return;
+    }
+    case "scrollForSession": {
+      if (!cap.collector) return;
+      const p = (step.params ?? {}) as {
+        sessionKey: string;
+        limitTotal?: number | string;
+        scrollStep?: number;
+        limitScroll?: number;
+      };
+      const limitTotal = p.limitTotal != null ? Number(p.limitTotal) : Infinity;
+      const maxScrolls = p.limitScroll ?? 50;
+      const baseStep = p.scrollStep ?? 800;
+      cap.collector.setCap(p.sessionKey, limitTotal); // 先设上限,迟到响应也被挡住
+      for (let i = 0; i < maxScrolls; i++) {
+        const thisStep = Math.round(baseStep * (0.7 + rand(0, 0.6)));
+        await scrollBy(wc, thisStep, target);
+        await sleep(rand(1600, 3600)); // 放慢节奏避免风控
+        if (rand(0, 1) < 0.25) await sleep(1000 + rand(300, 600));
+        if (cap.collector.count(p.sessionKey) >= limitTotal || !cap.collector.hasNext(p.sessionKey)) break;
+      }
+      return;
+    }
+    case "transform": {
+      const p = (step.params ?? {}) as { input?: { sessionKey?: string }; fn: string; saveAs?: string };
+      const data = p.input?.sessionKey && cap.collector ? cap.collector.values(p.input.sessionKey) : ctx;
+      // new Function 仅执行内置可信脚本(随模块打包,非用户输入)
+      const fn = new Function("input", "context", `return (${p.fn})(input, context)`);
+      const result = fn(data, ctx);
+      if (p.saveAs) ctx[`execute_${p.saveAs}`] = result;
+      return;
+    }
     default:
       throw new Error(`action 未实现: ${(step as AutomationStep).action}`);
   }
 }
 
 // --- 引擎原语(webContents 事件驱动,非 CDP) ---
+
+/** 按 deltaY 滚一次:有 target 在其坐标处滚,否则在视口中心滚(港 engine.scroll)。 */
+async function scrollBy(wc: WebContents, deltaY: number, target?: ElementTarget): Promise<void> {
+  if (target && (target.selector || target.text)) {
+    const c = await findElement(wc, target, false);
+    await scroll(wc, c.x, c.y, deltaY);
+  } else {
+    const { w, h } = await viewport(wc);
+    await scroll(wc, Math.round(w / 2), Math.round(h / 2), deltaY);
+  }
+}
 
 async function viewport(wc: WebContents): Promise<{ w: number; h: number }> {
   try {

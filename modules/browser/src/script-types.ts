@@ -1,6 +1,5 @@
 // 自动化 DSL 类型(港 openclaw AutomationScript)。
-// sessionCapture / scrollForSession / transform / downloadFile + 输出 saver(jsonpath/csv)留下一阶段;
-// extractZip(需 zip 库)/ saveMarkdown(需 node-html-markdown)未移植。
+// downloadFile / extractZip(需 zip 库)/ saveMarkdown(需 node-html-markdown)未移植。
 
 export interface ScriptVariable {
   key: string;
@@ -21,6 +20,38 @@ export interface ContextSetupEntry {
   value?: number | string;
 }
 
+/** 从一条接口响应抽某字段:path 用 . 分层 + [] 标记数组锚点;reg 为 "search::replace";type=array 取全部。 */
+export interface ValueKeySpec {
+  name: string;
+  path: string;
+  reg?: string;
+  type?: "array";
+}
+
+/** sessionCapture 的采集规格:命中 urlIncludes 的响应按 valueKey 抽行累积到 sessionKey。 */
+export interface SessionSpec {
+  sessionKey: string;
+  when?: string;
+  urlIncludes: string[];
+  valueKey: ValueKeySpec[];
+  hasNextKey?: string;
+}
+
+/** csv 输出列规格。source 取 session 或 context 的某键;rowsFrom 在该值为对象时指定内部数组属性。 */
+export interface OutputCsvSpec {
+  type: string;
+  source: string;
+  rowsFrom?: string;
+  columns: { name: string; from: string; joinWith?: string }[];
+}
+
+export interface OutputSchema {
+  json?: boolean;
+  csv?: OutputCsvSpec[];
+  excludeSessionKeys?: string[];
+  filename?: { prefix?: string; itemIdFrom?: string };
+}
+
 // 单一事实源:script-loader 校验白名单与 ActionType 类型都从这里派生。
 export const ACTION_TYPES = [
   "navigate",
@@ -38,6 +69,9 @@ export const ACTION_TYPES = [
   "execute",
   "assertPageState",
   "extract",
+  "sessionCapture",
+  "scrollForSession",
+  "transform",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 
@@ -78,6 +112,7 @@ export interface AutomationScript {
   startUrl?: string;
   variables?: ScriptVariable[];
   contextSetup?: Record<string, ContextSetupEntry>;
+  outputSchema?: OutputSchema;
   steps: AutomationStep[];
 }
 
@@ -92,8 +127,13 @@ export interface RunRecord {
   status: RunStatus;
   step?: number;
   total?: number;
-  output?: Record<string, unknown>;
-  /** 运行产物落盘路径(session capture);完成时写,跨会话可读。 */
+  /** 运行结果:{ context(extract/execute 产物), sessions(各 sessionKey 抽到的行) }。 */
+  output?: { context: Record<string, unknown>; sessions: Record<string, Record<string, unknown>[]> };
+  /** 各 sessionKey 采集条数概要(避免把全量塞进调用方上下文)。 */
+  sessions?: Record<string, number>;
+  /** 写出的 csv 文件路径。 */
+  outputFiles?: string[];
+  /** run 记录落盘路径(<runId>.json);完成时写,跨会话可读。 */
   outputFile?: string;
   errorCode?: string;
   message?: string;

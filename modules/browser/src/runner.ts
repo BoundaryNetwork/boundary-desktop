@@ -1,6 +1,13 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { writeOutputs } from "./saver.js";
 import type { AutomationScript, RunRecord } from "./script-types.js";
+
+/** runScript 的返回形态:context(extract/execute 产物)+ sessions(各 sessionKey 抽到的行)。 */
+interface RunOutput {
+  context: Record<string, unknown>;
+  sessions: Record<string, Record<string, unknown>[]>;
+}
 
 /** 串行 run 队列 + runId 取件号 + run 记录,并把产物落盘(session capture):完成即写
  *  <dataDir>/<runId>.json,构造时回载历史 run —— automation_runs/result 跨会话可读。
@@ -29,7 +36,7 @@ export class Runner {
   enqueue(
     script: AutomationScript,
     variables: Record<string, unknown>,
-    exec: (rec: RunRecord) => Promise<Record<string, unknown>>,
+    exec: (rec: RunRecord) => Promise<RunOutput>,
   ): { record: RunRecord; done: Promise<void> } {
     const runId = String(++this.#seq);
     const record: RunRecord = {
@@ -45,7 +52,21 @@ export class Runner {
     const done = this.#chain.then(async () => {
       record.status = "running";
       try {
-        record.output = await exec(record);
+        const out = await exec(record);
+        record.output = out;
+        record.sessions = Object.fromEntries(
+          Object.entries(out.sessions ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+        );
+        // outputSchema.csv 把采集结果写成 csv 落 <dataDir>/<runId>/<type>.csv。
+        if (script.outputSchema?.csv?.length) {
+          const runDir = join(this.#dir, runId);
+          try {
+            mkdirSync(runDir, { recursive: true });
+          } catch {
+            // 目录创建失败:csv 落盘静默退化,内存/记录仍可用
+          }
+          record.outputFiles = writeOutputs(script.outputSchema, out.sessions ?? {}, out.context ?? {}, runDir);
+        }
         record.status = "done";
       } catch (e) {
         record.status = "error";
