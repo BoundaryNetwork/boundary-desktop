@@ -24,9 +24,9 @@ const strArr = (a: unknown, k: string): string[] => {
 };
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** 浏览器能力工具(Phase 3a:webContents 可达的子集)。注册时框架自动加 `browser.` 前缀,
- *  经 WS/MCP/CLI 门面 list/invoke。handler 在主进程直接驱动活动标签,无跨进程往返。
- *  CDP 系(click/type/upload/intercept_next)留 Phase 3b。 */
+/** 浏览器能力工具。注册时框架自动加 `browser.` 前缀,经 WS/MCP/CLI 门面 list/invoke;
+ *  handler 在主进程直接驱动活动标签,无跨进程往返。click/type/upload/intercept_next 经
+ *  webContents.debugger 发 CDP,合成可信输入(反检测)。 */
 export function browserTools(deps: ToolDeps): ToolDefinition[] {
   const wc = (): WebContents => {
     const w = deps.active();

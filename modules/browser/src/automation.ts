@@ -19,12 +19,14 @@ export interface ElementTarget {
   selector?: string;
   text?: string;
 }
-interface Coords {
+export interface Coords {
   x: number;
   y: number;
+  width: number;
+  height: number;
 }
 
-/** selector / text 定位元素,滚入视野,返回视口内中心坐标(港 openclaw finder 的页内 JS)。 */
+/** selector / text 定位元素,滚入视野,返回视口内中心坐标 + 尺寸(港 openclaw finder 的页内 JS)。 */
 export async function findElement(wc: WebContents, target: ElementTarget, scrollIntoView = true): Promise<Coords> {
   ensureAttached(wc);
   const expr = `(function(){
@@ -35,7 +37,7 @@ export async function findElement(wc: WebContents, target: ElementTarget, scroll
     if(!el)return null;
     if(${scrollIntoView ? "true" : "false"}){var r0=el.getBoundingClientRect();if(r0.top<0||r0.bottom>(window.innerHeight||document.documentElement.clientHeight))el.scrollIntoView({block:'center',inline:'nearest'});}
     var r=el.getBoundingClientRect();if(r.width===0||r.height===0)return null;
-    return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+    return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),width:Math.round(r.width),height:Math.round(r.height)};
   })()`;
   const res = (await wc.debugger.sendCommand("Runtime.evaluate", { expression: expr, returnByValue: true })) as {
     result?: { value?: Coords | null };
@@ -58,7 +60,7 @@ function bezier(p0: P, p1: P, p2: P, p3: P, t: number): P {
 }
 let cursor: P = { x: 100, y: 100 };
 
-async function moveTo(wc: WebContents, x: number, y: number): Promise<void> {
+export async function moveTo(wc: WebContents, x: number, y: number): Promise<void> {
   ensureAttached(wc);
   const dx = x - cursor.x;
   const dy = y - cursor.y;
@@ -95,6 +97,32 @@ export async function click(wc: WebContents, x: number, y: number): Promise<void
   await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0 });
   await sleep(rand(40, 90));
   await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+}
+
+/** 在 (x,y) 处人类化滚轮 deltaY(港 openclaw mouse.scroll,去 overlay):
+ *  先把锚点小幅抖动后 moveTo,再分多段加权下发 mouseWheel,放慢节奏避免风控。 */
+export async function scroll(wc: WebContents, x: number, y: number, deltaY: number, humanize = true): Promise<void> {
+  ensureAttached(wc);
+  const jx = Math.round(x + rand(-20, 20));
+  const jy = Math.round(y + rand(-20, 20));
+  await moveTo(wc, jx, jy);
+  if (!humanize) {
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY, modifiers: 0 });
+    return;
+  }
+  const steps = Math.max(8, Math.min(20, Math.round(Math.abs(deltaY) / 50)));
+  const weights: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < steps; i++) {
+    const w = Math.pow(1 - i / steps, 1.5) + 0.1;
+    weights.push(w);
+    sum += w;
+  }
+  for (let i = 0; i < steps; i++) {
+    const stepDelta = Math.round((deltaY * weights[i]!) / sum);
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY: stepDelta, modifiers: 0 });
+    await sleep(rand(40, 110));
+  }
 }
 
 const NEAR = "abcdefghijklmnopqrstuvwxyz0123456789";
