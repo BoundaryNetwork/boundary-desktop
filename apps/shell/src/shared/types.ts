@@ -52,6 +52,10 @@ export interface HostApi {
   surface: {
     reportForeground(id: string | null): Promise<void>;
     reportTheme(theme: "light" | "dark"): Promise<void>;
+    /** 把分离到独立窗的 main 模块合并回主窗(占位卡片按钮调用)。 */
+    merge(id: string): Promise<void>;
+    /** 订阅某 main 模块 surface 的分离态变化,驱动主窗"已分离"占位卡片显隐。 */
+    onDetachedChange(listener: (id: string, detached: boolean) => void): () => void;
   };
   /** 无边框窗口的自绘红绿灯:把系统三连键语义经 IPC 暴露给壳(仅 macOS 用)。 */
   window: {

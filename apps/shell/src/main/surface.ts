@@ -1,6 +1,7 @@
 import { BrowserWindow, type WebContentsView } from "electron";
 import type { BaseContext, Disposable, ModuleSurface, Rect } from "@boundary-desktop/contract";
 import { StateContainer, type SurfaceProvider, type TrackDisposable } from "@boundary-desktop/host";
+import { IPC } from "../shared/ipc.js";
 
 /** 左侧导航栏宽度(与 Shell.tsx 的 grid `68px 1fr` 一致)。框架据此算右侧 content 区。 */
 const RAIL_WIDTH = 68;
@@ -178,6 +179,12 @@ export class SurfaceManager implements SurfaceProvider {
     const surface = new ManagedSurface(self.id, this, this.#theme);
     this.#surfaces.set(self.id, surface);
     this.publish(surface);
+    // 分离态变化下发壳:分离后模块 view 移到独立窗、主窗这块区域空出,壳据此显"已分离"占位卡片。
+    track(
+      surface.detached.subscribe((detached) =>
+        this.#win?.webContents.send(IPC.surfaceDetachedChanged, { id: self.id, detached }),
+      ),
+    );
     track({
       dispose: () => {
         surface.teardown();
@@ -185,6 +192,11 @@ export class SurfaceManager implements SurfaceProvider {
       },
     });
     return surface;
+  }
+
+  /** 壳发起的合并:把分离到独立窗的模块合并回主窗(占位卡片按钮)。 */
+  merge(id: string): void {
+    void this.#surfaces.get(id)?.merge();
   }
 
   /** 单个 surface 按当前主窗布局 + 前台规则发布区域(merge 回主窗后也调)。 */

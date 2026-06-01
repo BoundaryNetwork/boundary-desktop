@@ -35,6 +35,13 @@ const hostApi: HostApi = {
   surface: {
     reportForeground: (id) => ipcRenderer.invoke(IPC.surfaceForeground, id) as Promise<void>,
     reportTheme: (theme) => ipcRenderer.invoke(IPC.surfaceTheme, theme) as Promise<void>,
+    merge: (id) => ipcRenderer.invoke(IPC.surfaceMerge, id) as Promise<void>,
+    onDetachedChange: (listener) => {
+      const handler = (_e: unknown, msg: { id: string; detached: boolean }): void =>
+        listener(msg.id, msg.detached);
+      ipcRenderer.on(IPC.surfaceDetachedChanged, handler);
+      return () => ipcRenderer.removeListener(IPC.surfaceDetachedChanged, handler);
+    },
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,

@@ -18,6 +18,8 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [env, setEnv] = useState<string>("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 分离到独立窗的 main 模块 id 集合:这些模块在主窗内容区显"已分离"占位卡片。
+  const [detachedIds, setDetachedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void runtime.start();
@@ -37,6 +39,20 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     if (activeId) setOpenedIds((ids) => (ids.includes(activeId) ? ids : [...ids, activeId]));
     void window.hostApi.surface.reportForeground(activeId);
   }, [activeId]);
+
+  // main 模块分离/合并独立窗 → 更新集合,驱动占位卡片显隐。
+  useEffect(
+    () =>
+      window.hostApi.surface.onDetachedChange((id, detached) =>
+        setDetachedIds((prev) => {
+          const next = new Set(prev);
+          if (detached) next.add(id);
+          else next.delete(id);
+          return next;
+        }),
+      ),
+    [],
+  );
 
   // 主题归 renderer(data-theme);上报给 main,供 main 模块 surface 跟随。
   useEffect(() => {
@@ -113,7 +129,9 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
             // 已打开的模块全部保持挂载(多 active),只切前台可见;非前台 display:none。
             openedIds.map((id) => {
               const entry = modules.find((m) => m.id === id);
-              return entry ? <ModuleView key={id} entry={entry} hidden={id !== activeId} /> : null;
+              return entry ? (
+                <ModuleView key={id} entry={entry} hidden={id !== activeId} detached={detachedIds.has(id)} />
+              ) : null;
             })
           )}
         </div>
@@ -263,7 +281,15 @@ function RailButton({
  *  多 active:切前台不卸载,仅 hidden 控制显隐;模块保持激活(后台 tab 继续跑)。
  *  真正卸载(本组件 unmount,如窗口关闭)时才 deactivate。容器始终在 DOM 中。
  *  main 模块的界面是主进程 native view(经 surface 铺在右侧),本容器留空、由 view 覆盖。 */
-function ModuleView({ entry, hidden }: { entry: ModuleEntry; hidden: boolean }): JSX.Element {
+function ModuleView({
+  entry,
+  hidden,
+  detached,
+}: {
+  entry: ModuleEntry;
+  hidden: boolean;
+  detached: boolean;
+}): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [err, setErr] = useState("");
@@ -291,13 +317,76 @@ function ModuleView({ entry, hidden }: { entry: ModuleEntry; hidden: boolean }):
     };
   }, [entry.id]);
 
+  const Ic = navIcon(entry.ui?.icon);
+  const name = entry.ui?.displayName ?? entry.id;
+
   return (
     <div className="moduleview" style={{ display: hidden ? "none" : undefined }}>
       <div
         className="moduleview__container"
         ref={ref}
-        style={{ display: phase === "ready" ? "block" : "none" }}
+        style={{ display: phase === "ready" && !detached ? "block" : "none" }}
       />
+      {/* 模块分离到独立窗:native view 已移走、本区域空出,显"已分离"占位卡片 + 合并入口。 */}
+      {phase === "ready" && detached && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "var(--space-5)",
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "var(--r-5)",
+              background: "color-mix(in oklch, var(--accent-soft) 50%, transparent)",
+              display: "grid",
+              placeItems: "center",
+              color: "var(--accent)",
+            }}
+          >
+            <Ic size={32} strokeWidth={1.8} />
+          </div>
+          <div style={{ fontSize: "var(--text-4)", fontWeight: 600, color: "var(--fg-0)" }}>
+            {name}已分离到独立窗口
+          </div>
+          <div
+            style={{
+              fontSize: "var(--text-2)",
+              color: "var(--fg-3)",
+              textAlign: "center",
+              maxWidth: 320,
+              lineHeight: "var(--lh-3)",
+            }}
+          >
+            {name}正在一个独立窗口中运行，你可以把它合并回主窗口继续使用。
+          </div>
+          <button
+            type="button"
+            onClick={() => void window.hostApi.surface.merge(entry.id)}
+            style={{
+              marginTop: "var(--space-2)",
+              padding: "10px 22px",
+              borderRadius: "var(--r-3)",
+              border: "none",
+              background: "var(--accent)",
+              color: "white",
+              fontSize: "var(--text-2)",
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            合并回主窗口
+          </button>
+        </div>
+      )}
       {phase === "loading" && (
         <div className="content__placeholder">
           <p className="content__placeholder-hint">加载模块 {entry.ui?.displayName ?? entry.id}…</p>

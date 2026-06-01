@@ -120,6 +120,7 @@ function registerIpc(): void {
   // 壳 → main:前台模块 / 主题上报,驱动 main 模块的 surface 显隐与主题
   ipcMain.handle(IPC.surfaceForeground, (_e, id: string | null) => surfaces.setForeground(id));
   ipcMain.handle(IPC.surfaceTheme, (_e, theme: "light" | "dark") => surfaces.setTheme(theme));
+  ipcMain.handle(IPC.surfaceMerge, (_e, id: string) => surfaces.merge(id));
 
   // 壳 → main:无边框窗口自绘红绿灯的窗口控制(按事件来源 webContents 定位窗口)。
   const winOf = (e: { sender: Electron.WebContents }): BrowserWindow | null =>
