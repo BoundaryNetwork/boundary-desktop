@@ -6,7 +6,9 @@
 html, body { height: 100%; }
 body {
   font-family: var(--sans);
-  background: var(--bg-1);
+  /* tab 条坐落在 accent-soft 淡色底上(= openclaw --tab-strip-bg-flat),白色 active tab 与
+     白色圆角导航栏卡片才能"浮"出来、active tab 的反向圆弧才接得上下方卡片。底白则全平。 */
+  background: color-mix(in oklch, var(--accent-soft) 80%, var(--bg-1));
   color: var(--fg-0);
   overflow: hidden;
   user-select: none;
