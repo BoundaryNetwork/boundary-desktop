@@ -52,6 +52,9 @@ export interface ModuleManifest {
   /** 纯展示元信息。框架加载逻辑不读;仅基座渲染 module 入口(激活前)时使用。
    *  无 UI 入口的纯能力 module 可省略。 */
   ui?: ModuleUiMeta;
+  /** 置 true 则基座启动后即**后台激活**(不占前台)。用于需常驻、对外暴露 tool 的能力模块
+   *  (如浏览器):其 tool 在 MCP/WS 门面里始终可见,无需用户先在 UI 打开该模块。 */
+  autostart?: boolean;
 }
 
 export interface ModuleUiMeta {

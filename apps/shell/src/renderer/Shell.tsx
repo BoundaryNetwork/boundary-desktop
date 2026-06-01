@@ -31,6 +31,10 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
       );
       setModules(ordered);
       setActiveId((cur) => cur ?? ordered[0]?.id ?? null);
+      // autostart 能力模块开机后台激活:塞进 openedIds 即挂载(非前台、隐藏)→ 激活 →
+      // 注册 tool,使其在 MCP/WS 门面里始终可见,无需用户先点开。
+      const auto = ordered.filter((m) => m.autostart).map((m) => m.id);
+      if (auto.length) setOpenedIds((ids) => [...new Set([...ids, ...auto])]);
     });
   }, []);
 
