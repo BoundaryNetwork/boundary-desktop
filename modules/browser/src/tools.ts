@@ -28,6 +28,29 @@ const strArr = (a: unknown, k: string): string[] => {
 };
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** 页内执行:收集可见可交互元素 + 为每个算稳定唯一选择器。优先级:
+ *  #id(过滤动态 id)> data-*(含 id/test/qa/cy)> [name]/[aria-label]/[placeholder] > a[href]
+ *  > 结构路径(nth-of-type,锚到最近稳定 id 祖先)。每级都验 querySelectorAll 唯一,不唯一即降级。
+ *  String.raw 保留正则反斜杠原样。take `max` 上限封顶省 token。 */
+const SNAPSHOT_FN = String.raw`function(max){
+  function vis(el){var r=el.getBoundingClientRect();if(r.width<=0||r.height<=0)return false;var s=getComputedStyle(el);return s.visibility!=='hidden'&&s.display!=='none';}
+  function esc(s){try{return CSS.escape(s);}catch(e){return s;}}
+  function uniq(sel){try{return document.querySelectorAll(sel).length===1;}catch(e){return false;}}
+  var DYN=/(^[0-9])|[:\s]|^(ember|ext-|mui-|radix-|headlessui-|react-|svelte-|v-)|[0-9a-f]{12,}/i;
+  function qv(v){return v.replace(/\\/g,'\\\\').replace(/"/g,'\\"');}
+  function byId(el){var id=el.id;if(!id||DYN.test(id))return null;var s='#'+esc(id);return uniq(s)?s:null;}
+  function byData(el){for(var i=0;i<el.attributes.length;i++){var a=el.attributes[i];if(/^data-/.test(a.name)&&/(id|test|qa|cy)/i.test(a.name)&&a.value){var s='['+a.name+'="'+qv(a.value)+'"]';if(uniq(s))return s;}}return null;}
+  function byAttr(el){var ats=['name','aria-label','placeholder'];for(var i=0;i<ats.length;i++){var v=el.getAttribute(ats[i]);if(v){var s=el.tagName.toLowerCase()+'['+ats[i]+'="'+qv(v)+'"]';if(uniq(s))return s;}}return null;}
+  function byHref(el){if(el.tagName==='A'){var h=el.getAttribute('href');if(h&&h.length<120&&!/^javascript:/i.test(h)){var s='a[href="'+qv(h)+'"]';if(uniq(s))return s;}}return null;}
+  function path(el){var parts=[];while(el&&el.nodeType===1&&el.tagName!=='BODY'){var ids=byId(el);if(ids){parts.unshift(ids);break;}var tag=el.tagName.toLowerCase();var p=el.parentElement;if(!p){parts.unshift(tag);break;}var same=Array.prototype.filter.call(p.children,function(c){return c.tagName===el.tagName;});parts.unshift(same.length>1?tag+':nth-of-type('+(same.indexOf(el)+1)+')':tag);el=p;}return parts.join(' > ');}
+  function sel(el){return byId(el)||byData(el)||byAttr(el)||byHref(el)||path(el);}
+  function nm(el){var n=(el.getAttribute('aria-label')||el.innerText||el.value||el.getAttribute('placeholder')||el.getAttribute('alt')||el.getAttribute('title')||'').trim().replace(/\s+/g,' ');return n.slice(0,80);}
+  var Q='a,button,input,textarea,select,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="radio"],[onclick],[contenteditable="true"],[contenteditable=""]';
+  var nodes=document.querySelectorAll(Q),out=[],seen={};
+  for(var i=0;i<nodes.length&&out.length<max;i++){var el=nodes[i];if(!vis(el))continue;var s=sel(el);if(!s||seen[s])continue;seen[s]=1;var o={tag:el.tagName.toLowerCase(),name:nm(el),sel:s};var role=el.getAttribute('role');if(role)o.role=role;var ty=el.getAttribute('type');if(ty)o.type=ty;out.push(o);}
+  return {url:location.href,title:document.title,count:out.length,truncated:nodes.length>max,elements:out};
+}`;
+
 /** 浏览器能力工具。注册时框架自动加 `browser.` 前缀,经 WS/MCP/CLI 门面 list/invoke;
  *  handler 在主进程直接驱动活动标签,无跨进程往返。click/type/upload/intercept_next 经
  *  webContents.debugger 发 CDP,合成可信输入(反检测)。 */
@@ -70,6 +93,14 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
         });
         return { url: w.getURL(), title: w.getTitle() };
       },
+    },
+    {
+      name: "snapshot",
+      description:
+        "页面可交互元素快照(DOM):每个元素带稳定唯一 sel(优先 #id→data-*id*→[name]/[aria-label]→a[href]→结构路径)," +
+        "可直接把 sel 传给 click/type/get_text。仅可见可交互元素,max 封顶(默认 200)省 token",
+      schema: { type: "object", properties: { max: { type: "number" } } },
+      handler: async (a) => js(`(${SNAPSHOT_FN})(${num(a, "max") ?? 200})`),
     },
     {
       name: "get_text",
