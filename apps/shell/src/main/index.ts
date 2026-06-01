@@ -87,6 +87,25 @@ async function ensureInstalled(id: string): Promise<void> {
   await registry.install(manifest);
 }
 
+/** host 侧开机激活 autostart 模块:不依赖渲染端/登录态,模块激活即注册 tool,WS/MCP 门面
+ *  常驻暴露其能力(面向 agent 的对外协议无需用户先在 UI 打开该模块)。 */
+async function activateAutostart(): Promise<void> {
+  let modules;
+  try {
+    modules = (await source.catalog()).modules.filter((m) => m.autostart);
+  } catch (e) {
+    console.error("[shell] autostart 读 catalog 失败", e);
+    return;
+  }
+  for (const m of modules) {
+    await serializePerId(m.id, async () => {
+      if (registry.status(m.id) === "active") return;
+      await ensureInstalled(m.id);
+      await registry.activate(m.id);
+    }).catch((e) => console.error(`[shell] autostart 激活 ${m.id} 失败`, e));
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.appEnv, () => activeEnv);
 
@@ -101,7 +120,7 @@ function registerIpc(): void {
   // 壳 → main:模块导航与激活
   ipcMain.handle(IPC.modulesList, async (): Promise<ModuleEntry[]> => {
     const catalog = await source.catalog();
-    return catalog.modules.map((m) => ({ id: m.id, version: m.version, runtime: m.runtime, ui: m.ui, autostart: m.autostart }));
+    return catalog.modules.map((m) => ({ id: m.id, version: m.version, runtime: m.runtime, ui: m.ui }));
   });
   // 按 id 串行化 activate/deactivate:check-then-act 跨 await 不原子(StrictMode 双调
   // effect、快速点击会并发),串行 + 意图幂等才不会撞 Registry 的"已安装"等不变量。
@@ -221,6 +240,9 @@ void app.whenReady().then(async () => {
   });
   registerIpc();
   createWindow();
+
+  // 能力模块开机激活(host 驱动,先于门面),其 tool 在 WS/MCP 一起来即可见。
+  await activateAutostart();
 
   // 门面访问 token:默认随机生成(每次启动新),BOUNDARY_FACADE_TOKEN 可固定(便于配置客户端)。
   // WS 与 MCP 是同一暴露面,共用同一 token。

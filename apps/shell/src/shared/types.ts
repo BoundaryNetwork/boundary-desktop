@@ -13,8 +13,6 @@ export interface ModuleEntry {
   version: string;
   runtime: Runtime;
   ui?: ModuleUiMeta;
-  /** 启动后台激活(常驻能力模块,tool 始终经门面可见)。 */
-  autostart?: boolean;
 }
 
 /** 渲染层共享状态镜像:main 是权威,经 IPC 种子 + 推送同步给 renderer,
