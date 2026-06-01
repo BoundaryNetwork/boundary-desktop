@@ -11,6 +11,8 @@ interface Deps {
   scriptsDir: string;
   active: () => WebContents | null;
   runner: Runner;
+  /** 请求把浏览器区域提到前台(跑脚本时浮出给用户看)。 */
+  foreground: () => void;
 }
 
 /** 概要:各 sessionKey 条数 + context 键名 + csv 文件路径,不回全量数据,避免塞爆调用方上下文。 */
@@ -80,6 +82,7 @@ export function automationTools(deps: Deps): ToolDefinition[] {
         const args = (a ?? {}) as { scriptId?: string; variables?: Record<string, unknown> };
         const script = loadScripts(deps.scriptsDir).scripts.find((s) => s.id === args.scriptId);
         if (!script) throw new Error(`无脚本: ${args.scriptId ?? ""}`);
+        deps.foreground(); // 浮出浏览器,让用户看着脚本执行
         const vars = args.variables ?? {};
         const { record, done } = deps.runner.enqueue(script, vars, (rec) =>
           runScript(script, vars, { active: deps.active, onStep: (i) => (rec.step = i) }),

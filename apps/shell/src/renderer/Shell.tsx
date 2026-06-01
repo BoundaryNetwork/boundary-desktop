@@ -40,6 +40,9 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     void window.hostApi.surface.reportForeground(activeId);
   }, [activeId]);
 
+  // 模块请求前台(如 agent 驱动浏览器导航)→ 切到该模块,rail 高亮 + 区域浮出。
+  useEffect(() => window.hostApi.surface.onForegroundRequest((id) => setActiveId(id)), []);
+
   // main 模块分离/合并独立窗 → 更新集合,驱动占位卡片显隐。
   useEffect(
     () =>

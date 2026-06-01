@@ -77,14 +77,14 @@ export default defineModule<MainContext>({
     store.open(""); // 初始一个新标签页(用回载的当前账号)
 
     // 对外能力:注册 browser.* 工具(自动加前缀,经 WS/MCP/CLI 门面暴露;句柄由 ctx 自动回收)。
-    for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url) })) {
+    for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url), foreground: () => s.requestForeground() })) {
       ctx.registerTool(def);
     }
     // automation.* 工具:内置 DSL 脚本(随包到 dist/scripts)+ 串行 runner。
     const scriptsDir = fileURLToPath(new URL("./scripts/", import.meta.url));
     // 运行产物落模块自有 userData 目录(session capture,跨会话可读)。
     runner = new Runner(join(app.getPath("userData"), "boundary-browser", "runs"));
-    for (const def of automationTools({ scriptsDir, active: () => active(), runner })) {
+    for (const def of automationTools({ scriptsDir, active: () => active(), runner, foreground: () => s.requestForeground() })) {
       ctx.registerTool(def);
     }
 

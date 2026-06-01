@@ -58,6 +58,8 @@ export interface HostApi {
     merge(id: string): Promise<void>;
     /** 订阅某 main 模块 surface 的分离态变化,驱动主窗"已分离"占位卡片显隐。 */
     onDetachedChange(listener: (id: string, detached: boolean) => void): () => void;
+    /** 订阅模块的前台请求(如 agent 驱动浏览器导航),壳据此切 activeId 同步高亮。 */
+    onForegroundRequest(listener: (id: string) => void): () => void;
   };
   /** 无边框窗口的自绘红绿灯:把系统三连键语义经 IPC 暴露给壳(仅 macOS 用)。 */
   window: {

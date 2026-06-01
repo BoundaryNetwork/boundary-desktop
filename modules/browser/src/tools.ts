@@ -7,6 +7,8 @@ interface ToolDeps {
   active: () => WebContents | null;
   /** 新建标签并设为活动,返回 id。 */
   openTab: (url: string) => number;
+  /** 请求把浏览器区域提到前台(agent 驱动导航时浮出给用户看)。 */
+  foreground: () => void;
 }
 
 const rec = (a: unknown): Record<string, unknown> => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
@@ -40,7 +42,11 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       name: "new_tab",
       description: "新建标签页(可选初始 URL),返回 tabId",
       schema: { type: "object", properties: { url: { type: "string" } } },
-      handler: async (a) => ({ tabId: deps.openTab(str(a, "url") ?? "") }),
+      handler: async (a) => {
+        const tabId = deps.openTab(str(a, "url") ?? "");
+        deps.foreground(); // 浮出给用户看
+        return { tabId };
+      },
     },
     {
       name: "navigate",
@@ -50,6 +56,7 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
         const url = str(a, "url");
         if (!url) throw new Error("navigate 需要 url");
         const w = wc();
+        deps.foreground(); // 浮出浏览器,让用户看着 agent 导航
         await w.loadURL(url).catch((e: unknown) => {
           if (!String(e).includes("ERR_ABORTED")) throw e; // 重定向取消属正常
         });

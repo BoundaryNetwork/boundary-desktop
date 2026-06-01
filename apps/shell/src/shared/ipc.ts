@@ -28,6 +28,8 @@ export const IPC = {
   windowFullscreenChange: "window:fullscreen-change",
   // main → 壳:某 main 模块 surface 分离态变化,驱动主窗内容区显隐"已分离"占位卡片
   surfaceDetachedChanged: "surface:detachedChanged",
+  // main → 壳:模块请求把自己提到前台(如 agent 驱动浏览器导航),壳切 activeId 同步高亮
+  surfaceForegroundRequest: "surface:foregroundRequest",
 
   // main → renderer runtime(webContents.send + reqId,runtime 经 rtReply 回)
   rtActivate: "rt:activate",

@@ -80,6 +80,10 @@ class ManagedSurface implements ModuleSurface {
     });
   }
 
+  requestForeground(): void {
+    this.#manager.requestForeground(this.id);
+  }
+
   async merge(): Promise<void> {
     const dw = this.#detachWin;
     if (!dw) return;
@@ -166,6 +170,13 @@ export class SurfaceManager implements SurfaceProvider {
   setForeground(id: string | null): void {
     this.#foregroundId = id;
     this.#publishAll();
+  }
+
+  /** 模块请求把自己提到前台(经 surface.requestForeground):立即切前台显隐,并通知 renderer
+   *  同步 activeId(rail 高亮 + 原前台模块隐藏)。 */
+  requestForeground(id: string): void {
+    this.setForeground(id);
+    this.#win?.webContents.send(IPC.surfaceForegroundRequest, id);
   }
 
   /** shell renderer 上报主题;下发给所有 surface。 */

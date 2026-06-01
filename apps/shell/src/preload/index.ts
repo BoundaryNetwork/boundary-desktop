@@ -42,6 +42,11 @@ const hostApi: HostApi = {
       ipcRenderer.on(IPC.surfaceDetachedChanged, handler);
       return () => ipcRenderer.removeListener(IPC.surfaceDetachedChanged, handler);
     },
+    onForegroundRequest: (listener) => {
+      const handler = (_e: unknown, id: string): void => listener(id);
+      ipcRenderer.on(IPC.surfaceForegroundRequest, handler);
+      return () => ipcRenderer.removeListener(IPC.surfaceForegroundRequest, handler);
+    },
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,

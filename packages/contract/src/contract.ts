@@ -263,6 +263,9 @@ export interface ModuleSurface {
   detach(): Promise<void>;
   /** 合并回主窗口。 */
   merge(): Promise<void>;
+  /** 请求把本区域提到前台(变可见)。用于模块响应外部事件(如 agent 经 tool 驱动浏览器导航)
+   *  时把自己的 UI 浮出来给用户看;框架据此切前台并同步导航高亮。 */
+  requestForeground(): void;
 }
 
 export interface ViewDefinition {
