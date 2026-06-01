@@ -55,11 +55,17 @@ class ManagedSurface implements ModuleSurface {
     if (this.#detachWin) return;
     const main = this.#manager.window();
     const cb = main.getContentBounds();
+    const isMac = process.platform === "darwin";
     const dw = new BrowserWindow({
       width: Math.max(480, cb.width - RAIL_WIDTH),
       height: cb.height,
       title: this.id,
+      // 与主窗口一致:macOS 无边框,模块自有 toolbar 即顶部;tab 条空白处可拖窗,
+      // 合并按钮回坞(关窗即合并)。系统三连键隐式保留,显式隐藏。
+      frame: isMac ? false : true,
+      titleBarStyle: isMac ? "hidden" : "default",
     });
+    if (isMac) dw.setWindowButtonVisibility(false);
     this.#detachWin = dw;
     for (const v of this.#views) {
       main.contentView.removeChildView(v);
