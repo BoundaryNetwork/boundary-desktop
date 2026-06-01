@@ -35,6 +35,7 @@ const api: TabApi = {
   showTabMenu: (tabId, x, y) => ipcRenderer.send(CH.tabMenu, { tabId, x, y }),
   toggleGroupCollapse: (groupId) => ipcRenderer.send(CH.groupCollapse, { groupId }),
   renameGroup: (groupId, name) => ipcRenderer.send(CH.groupRename, { groupId, name }),
+  dragTab: (tabId, beforeId, groupId) => ipcRenderer.send(CH.dragTab, { tabId, beforeId, groupId }),
   ready: () => ipcRenderer.send(CH.ready),
   onState: (cb) => {
     const h = (_e: unknown, s: ChromeState): void => cb(s);

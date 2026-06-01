@@ -122,6 +122,21 @@ export class TabStore {
     return this.#tabs.find((t) => t.id === id)?.pinned ?? false;
   }
 
+  /** 拖拽:把 tabId 移到 beforeId 之前(null=末尾)并设分组(null=无组)。(港 openclaw dragTab) */
+  dragTab(tabId: number, beforeId: number | null, groupId: number | null): void {
+    const i = this.#tabs.findIndex((t) => t.id === tabId);
+    if (i < 0) return;
+    const t = this.#tabs[i]!;
+    const old = t.groupId;
+    t.groupId = groupId != null && this.#groups.has(groupId) ? groupId : undefined;
+    this.#tabs.splice(i, 1);
+    const j = beforeId == null ? -1 : this.#tabs.findIndex((x) => x.id === beforeId);
+    if (j < 0) this.#tabs.push(t);
+    else this.#tabs.splice(j, 0, t);
+    if (old != null && old !== t.groupId) this.#pruneGroup(old);
+    this.#emit();
+  }
+
   setGroupColor(groupId: number, color: GroupColor): void {
     const g = this.#groups.get(groupId);
     if (!g) return;

@@ -70,7 +70,17 @@ export function Toolbar(): JSX.Element {
   return (
     <div id="toolbar">
       <div id="tab-strip">
-        <div id="tabs">
+        <div
+          id="tabs"
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("text/tab")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            // 落在标签条空白处:移到末尾、脱离分组
+            const id = Number(e.dataTransfer.getData("text/tab"));
+            if (id) window.tabAPI.dragTab(id, null, null);
+          }}
+        >
           {/* 固定标签:恒最左,favicon-only */}
           {state.tabs
             .filter((t) => t.pinned)
@@ -215,7 +225,20 @@ function Tab({ tab, active, inGroup }: { tab: TabMeta; active: boolean; inGroup:
   return (
     <div
       className={cls}
-      title={tab.pinned ? tab.title || tab.url : tab.title || tab.url}
+      title={tab.title || tab.url}
+      draggable={!tab.pinned}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/tab", String(tab.id));
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("text/tab")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.stopPropagation(); // 落在标签上:移到该标签前、并入其分组(无组则脱组)
+        const id = Number(e.dataTransfer.getData("text/tab"));
+        if (id && id !== tab.id) window.tabAPI.dragTab(id, tab.id, tab.groupId ?? null);
+      }}
       onClick={() => window.tabAPI.switchTab(tab.id)}
       onContextMenu={(e) => {
         e.preventDefault();

@@ -15,6 +15,7 @@ export const CH = {
   tabMenu: "browser-chrome:tab-menu", // 右键标签 → main 弹原生菜单(含分组操作);payload {tabId,x,y}
   groupCollapse: "browser-chrome:group-collapse", // 点 chip 折叠/展开分组;payload {groupId}
   groupRename: "browser-chrome:group-rename", // 双击 chip 重命名;payload {groupId,name}
+  dragTab: "browser-chrome:drag-tab", // 拖拽重排/进出分组;payload {tabId,beforeId,groupId}
   ready: "browser-chrome:ready", // 页面订阅就绪后拉一次全量态(避开首帧广播早于监听注册的竞态)
   // main → chrome 页(标签列表 + 分组 + 活动标签导航态 + 主题)
   state: "browser-chrome:state",
@@ -68,6 +69,8 @@ export interface TabApi {
   toggleGroupCollapse(groupId: number): void;
   /** 双击分组 chip 重命名。 */
   renameGroup(groupId: number, name: string): void;
+  /** 拖拽:把 tabId 移到 beforeId 之前(null=末尾),并设其分组(null=无组)。 */
+  dragTab(tabId: number, beforeId: number | null, groupId: number | null): void;
   /** 订阅就绪后拉一次当前全量态。 */
   ready(): void;
   /** 订阅全量态;返回退订函数。 */

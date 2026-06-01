@@ -115,6 +115,14 @@ export default defineModule<MainContext>({
       const p = payload as { groupId?: unknown; name?: unknown };
       if (chrome(e) && typeof p?.groupId === "number" && typeof p?.name === "string") store!.renameGroup(p.groupId, p.name);
     });
+    listen(CH.dragTab, (e, payload) => {
+      const p = payload as { tabId?: unknown; beforeId?: unknown; groupId?: unknown };
+      if (chrome(e) && typeof p?.tabId === "number") {
+        const beforeId = typeof p.beforeId === "number" ? p.beforeId : null;
+        const groupId = typeof p.groupId === "number" ? p.groupId : null;
+        store!.dragTab(p.tabId, beforeId, groupId);
+      }
+    });
   },
 
   deactivate() {
