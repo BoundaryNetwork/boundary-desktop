@@ -33,5 +33,7 @@ export { MainLoader } from "./main-loader.js";
 export type { ToolFacade } from "./facade.js";
 export { startWsFacade } from "./ws-facade.js";
 export type { WsFacadeHandle } from "./ws-facade.js";
+export { startMcpFacade } from "./mcp-facade.js";
+export type { McpFacadeHandle } from "./mcp-facade.js";
 
 export { HOST_API_VERSION } from "@boundary-desktop/contract";

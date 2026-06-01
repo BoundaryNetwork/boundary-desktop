@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain, session } from "electron";
-import { HostServices, Registry, startWsFacade } from "@boundary-desktop/host";
+import { HostServices, Registry, startMcpFacade, startWsFacade } from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
@@ -224,6 +224,10 @@ void app.whenReady().then(async () => {
   const wsPort = Number(process.env.BOUNDARY_WS_PORT ?? 0);
   const ws = await startWsFacade(registry.facade(), { port: wsPort });
   console.log(`[shell] WS 门面已起:ws://127.0.0.1:${ws.port}`);
+
+  const mcpPort = Number(process.env.BOUNDARY_MCP_PORT ?? 0);
+  const mcp = await startMcpFacade(registry.facade(), { port: mcpPort });
+  console.log(`[shell] MCP 门面已起:http://127.0.0.1:${mcp.port}`);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
