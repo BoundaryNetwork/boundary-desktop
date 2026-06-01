@@ -11,6 +11,8 @@ interface Deps {
   scriptsDir: string;
   active: () => WebContents | null;
   runner: Runner;
+  /** 新建标签并设为活动,返回 id;指定 profile 则在该账号(不存在自动建)隔离会话中打开。 */
+  openTab: (url: string, profile?: string) => number;
   /** 请求把浏览器区域提到前台(跑脚本时浮出给用户看)。 */
   foreground: () => void;
 }
@@ -72,16 +74,19 @@ export function automationTools(deps: Deps): ToolDefinition[] {
     },
     {
       name: "automation_run",
-      description: "运行自动化脚本。≤55s 完成回 summary+output;超时回 runId,后续 automation_status 轮询",
+      description:
+        "运行自动化脚本。≤55s 完成回 summary+output;超时回 runId,后续 automation_status 轮询。" +
+        "指定 profile 则在该账号隔离会话(不存在自动建)中开新标签后执行",
       schema: {
         type: "object",
         required: ["scriptId"],
-        properties: { scriptId: { type: "string" }, variables: { type: "object" } },
+        properties: { scriptId: { type: "string" }, variables: { type: "object" }, profile: { type: "string" } },
       },
       handler: async (a) => {
-        const args = (a ?? {}) as { scriptId?: string; variables?: Record<string, unknown> };
+        const args = (a ?? {}) as { scriptId?: string; variables?: Record<string, unknown>; profile?: string };
         const script = loadScripts(deps.scriptsDir).scripts.find((s) => s.id === args.scriptId);
         if (!script) throw new Error(`无脚本: ${args.scriptId ?? ""}`);
+        if (args.profile) deps.openTab("", args.profile); // 在指定账号开新标签,脚本即在该会话执行
         deps.foreground(); // 浮出浏览器,让用户看着脚本执行
         const vars = args.variables ?? {};
         const { record, done } = deps.runner.enqueue(script, vars, (rec) =>

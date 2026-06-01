@@ -76,15 +76,29 @@ export default defineModule<MainContext>({
     if (savedProfiles?.current && profiles.has(savedProfiles.current)) store.setCurrentProfile(savedProfiles.current);
     store.open(""); // 初始一个新标签页(用回载的当前账号)
 
+    // 账号(profile)切换:不存在则建 + 落盘;切当前账号(新标签据此分区隔离 cookie/storage)。
+    // 让 agent 调用时可传任意 profile 获得独立隔离会话(如不同店铺账号)。
+    const useProfile = (id: string): void => {
+      if (!profiles.has(id)) profiles.set(id, id);
+      if (store!.currentProfile() !== id) store!.setCurrentProfile(id);
+      persistProfiles();
+    };
+    const openTab = (url: string, profile?: string): number => {
+      if (profile) useProfile(profile);
+      return store!.open(url);
+    };
+    const listProfiles = (): { id: string; name: string; current: boolean }[] =>
+      [...profiles.entries()].map(([id, name]) => ({ id, name, current: id === store!.currentProfile() }));
+
     // 对外能力:注册 browser.* 工具(自动加前缀,经 WS/MCP/CLI 门面暴露;句柄由 ctx 自动回收)。
-    for (const def of browserTools({ active: () => active(), openTab: (url) => store!.open(url), foreground: () => s.requestForeground() })) {
+    for (const def of browserTools({ active: () => active(), openTab, listProfiles, foreground: () => s.requestForeground() })) {
       ctx.registerTool(def);
     }
     // automation.* 工具:内置 DSL 脚本(随包到 dist/scripts)+ 串行 runner。
     const scriptsDir = fileURLToPath(new URL("./scripts/", import.meta.url));
     // 运行产物落模块自有 userData 目录(session capture,跨会话可读)。
     runner = new Runner(join(app.getPath("userData"), "boundary-browser", "runs"));
-    for (const def of automationTools({ scriptsDir, active: () => active(), runner, foreground: () => s.requestForeground() })) {
+    for (const def of automationTools({ scriptsDir, active: () => active(), runner, openTab, foreground: () => s.requestForeground() })) {
       ctx.registerTool(def);
     }
 
