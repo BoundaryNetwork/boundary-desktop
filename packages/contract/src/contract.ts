@@ -278,6 +278,90 @@ export interface MenuItemDefinition {
 }
 
 // ===========================================================================
+// 6.1 WebView Kernel —— 通用宿主能力(原生网页渲染 + 驱动)。语义上不绑浏览器业务
+// (tab/书签/地址栏那类),任何要在区域内渲染并驱动网页的模块都可用;实现基于 Chromium
+// WebContentsView,故底层逃生口(cdp)是 Chromium 专属——见 WebviewHandle.cdp 注释。
+// ===========================================================================
+
+/** 一个浏览器账号:一套隔离的 cookie/storage 分区。注册表由基座持有(共享登录态)。 */
+export interface WebviewProfile {
+  id: string;
+  name: string;
+}
+
+export type WebviewEvent = "did-navigate" | "title-updated" | "loading" | "favicon-updated";
+
+/** 页面节点的不透明引用(driver 内部映射到 CDP backendNodeId 等);消费方只原样传回。 */
+export interface ElementRef {
+  readonly token: string;
+}
+
+export interface ScrollOptions {
+  /** 滚动目标(元素引用或选择器);省略则滚动整页。 */
+  target?: ElementRef | string;
+  /** 水平增量偏移,CSS 像素;正右负左。 */
+  dx?: number;
+  /** 垂直增量偏移,CSS 像素;正下负上。 */
+  dy?: number;
+}
+
+export interface ScreenshotOptions {
+  fullPage?: boolean;
+}
+
+/** 一块原生网页 view 的句柄。注册类:基座把它绑到激活生命周期,deactivate 自动销毁。
+ *  对 renderer 模块所有方法经 IPC bounce 到主进程;对 main 模块主进程内直调。 */
+export interface WebviewHandle extends Disposable {
+  navigate(url: string): Promise<void>;
+  /** 区域矩形(DIP,相对宿主窗口 content 区);消费方喂(main 派生 surface.bounds,renderer 测 DOM)。 */
+  setBounds(rect: Rect): void;
+  /** 模块内部显隐意图;最终可见性 = 模块前台 AND 本值(前台态框架自动叠加)。 */
+  setVisible(visible: boolean): void;
+  /** false=锁定:框架在 native 层盖透明 backdrop 拦人鼠标键盘;程序通道(下列)不受影响。 */
+  setInteractive(on: boolean): void;
+  on(event: WebviewEvent, listener: (payload: unknown) => void): Disposable;
+
+  // --- 单步原语(下沉的 AutomationEngine)-------------------------------------
+  find(selector: string): Promise<ElementRef | null>;
+  click(target: ElementRef | string): Promise<void>;
+  type(target: ElementRef | string, text: string): Promise<void>;
+  upload(target: ElementRef | string, paths: string[]): Promise<void>;
+  scroll(opts: ScrollOptions): Promise<void>;
+  screenshot(opts?: ScreenshotOptions): Promise<Uint8Array>;
+  eval<T = unknown>(expression: string): Promise<T>;
+
+  /** 原始 CDP(Chromium DevTools Protocol)通道。内核基于 Chromium WebContentsView,
+   *  这是其底层驱动逃生口——单步原语满足不了时直接发 CDP;按定义即 Chromium 专属,不保证可移植。
+   *  每个 view 一条独立会话,消费方互不干扰。 */
+  readonly cdp: {
+    send(method: string, params?: object): Promise<unknown>;
+    on(event: string, listener: (payload: unknown) => void): Disposable;
+  };
+}
+
+/** 创建一块网页 view 的选项:选 profile 分区、是否可交互、是否绑定到某 surface(随其 detach)。 */
+export interface WebviewCreateOptions {
+  /** 用哪个 profile 的分区;省略走 default。 */
+  profileId?: string;
+  /** 是否允许人操作;默认 true。false 由框架盖 backdrop 锁定。 */
+  interactive?: boolean;
+  /** 可选绑定一个 surface:view 跟随该 surface(detach 时框架整体 re-parent)。
+   *  main 模块传自己的 ctx.surface;renderer 模块不传(view 挂主窗 content 区)。 */
+  surface?: ModuleSurface;
+}
+
+/** 框架分配的通用「原生网页渲染 + 驱动」能力(WebView Kernel)。任何 runtime 的模块都可用。 */
+export interface WebviewKernel {
+  create(opts?: WebviewCreateOptions): Promise<WebviewHandle>;
+  /** profile 注册表(共享登录态)。 */
+  readonly profiles: {
+    list(): Promise<WebviewProfile[]>;
+    create(name: string): Promise<WebviewProfile>;
+    remove(id: string): Promise<void>;
+  };
+}
+
+// ===========================================================================
 // 7. 基座内部接口(Loader / Registry)—— module 看不到,列出以示完整
 // ===========================================================================
 
