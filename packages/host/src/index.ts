@@ -28,6 +28,9 @@ export type {
   StorageBackend,
 } from "./capabilities.js";
 
+export { ProfileRegistry, wrapDriverView } from "./webview.js";
+export type { DriverWebview, DriverCreateOptions, WebviewDriver } from "./webview.js";
+
 export { MainLoader } from "./main-loader.js";
 
 export type { ToolFacade } from "./facade.js";
