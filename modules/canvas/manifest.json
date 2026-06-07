@@ -2,8 +2,13 @@
   "id": "canvas",
   "version": "0.1.0",
   "runtime": "renderer",
-  "hostApiVersion": "^0.2.0",
+  "hostApiVersion": "^0.3.0",
   "entry": "dist/index.mjs",
   "integrity": "",
-  "ui": { "displayName": "画布", "icon": "canvas", "description": "画布工作区", "order": 5 }
+  "ui": {
+    "displayName": "画布",
+    "icon": "canvas",
+    "description": "画布工作区",
+    "order": 5
+  }
 }

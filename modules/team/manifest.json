@@ -2,8 +2,13 @@
   "id": "team",
   "version": "0.1.0",
   "runtime": "renderer",
-  "hostApiVersion": "^0.2.0",
+  "hostApiVersion": "^0.3.0",
   "entry": "dist/index.mjs",
   "integrity": "",
-  "ui": { "displayName": "团队", "icon": "team", "description": "数字员工团队", "order": 2 }
+  "ui": {
+    "displayName": "团队",
+    "icon": "team",
+    "description": "数字员工团队",
+    "order": 2
+  }
 }

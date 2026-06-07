@@ -7,6 +7,7 @@ import type {
   ReadableState,
   RendererContext,
   ToolHandler,
+  WebviewKernel,
 } from "@boundary-desktop/contract";
 import type { ActivateRequest, SharedState } from "../shared/types";
 
@@ -22,6 +23,17 @@ const EMPTY_SHARED: SharedState = {
   token: null,
   config: {},
   network: { online: true, connected: false },
+};
+
+/** renderer 模块的 webview 能力存根:IPC bounce 尚未实现,create/profiles 均抛错。
+ *  完整实现在后续阶段补齐(需在 ModuleBridge + preload + main ipcHandle 各层各加通道)。 */
+const RENDERER_WEBVIEW_STUB: WebviewKernel = {
+  create: () => Promise.reject(new Error("renderer webview IPC 尚未实现")),
+  profiles: {
+    list: () => Promise.reject(new Error("renderer webview IPC 尚未实现")),
+    create: () => Promise.reject(new Error("renderer webview IPC 尚未实现")),
+    remove: () => Promise.reject(new Error("renderer webview IPC 尚未实现")),
+  },
 };
 
 /** 渲染进程的模块宿主。主进程经 moduleBridge 下达 activate/deactivate/toolInvoke;
@@ -147,6 +159,7 @@ class RendererRuntime {
         delete: (key: string): Promise<void> => b.storage(aid, "delete", key) as Promise<void>,
         keys: (): Promise<string[]> => b.storage(aid, "keys") as Promise<string[]>,
       },
+      webview: RENDERER_WEBVIEW_STUB,
       container,
       theme: {
         get: () => "light",

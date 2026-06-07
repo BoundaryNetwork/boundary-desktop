@@ -2,9 +2,14 @@
   "id": "browser",
   "version": "0.1.0",
   "runtime": "main",
-  "hostApiVersion": "^0.2.0",
+  "hostApiVersion": "^0.3.0",
   "entry": "dist/index.mjs",
   "integrity": "",
   "autostart": true,
-  "ui": { "displayName": "浏览器", "icon": "browser", "description": "内置浏览器", "order": 6 }
+  "ui": {
+    "displayName": "浏览器",
+    "icon": "browser",
+    "description": "内置浏览器",
+    "order": 6
+  }
 }
