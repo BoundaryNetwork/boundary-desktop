@@ -14,7 +14,7 @@
 
 ## 文件结构(Phase 1)
 
-- `packages/contract/src/contract.ts` — 新增 `Profile` / `WebviewEvent` / `ElementRef` / `ScrollOptions` / `ScreenshotOptions` / `WebviewHandle` / `WebviewCreateOptions` / `WebviewKernel` 类型;`BaseContext` 加 `webview` 字段(Task 3 才加,保持中途绿)。
+- `packages/contract/src/contract.ts` — 新增 `WebviewProfile` / `WebviewEvent` / `ElementRef` / `ScrollOptions` / `ScreenshotOptions` / `WebviewHandle` / `WebviewCreateOptions` / `WebviewKernel` 类型;`BaseContext` 加 `webview` 字段(Task 3 才加,保持中途绿)。
 - `packages/contract/src/version.ts` — `HOST_API_VERSION` `0.2.0` → `0.3.0`(Task 4)。
 - `packages/contract/package.json` — `version` 同步 `0.3.0`(Task 4)。
 - `packages/host/src/webview.ts` — **新建**。`WebviewDriver` / `DriverWebview` seam 接口 + `wrapDriverView`(把 driver 产物包成契约 `WebviewHandle`,dispose 绑 track)+ `ProfileRegistry`(host 级共享 profile,经 `StorageBackend` 持久化)。
@@ -42,12 +42,12 @@
 // ===========================================================================
 
 /** 一个浏览器账号:一套隔离的 cookie/storage 分区。注册表由基座持有(共享登录态)。 */
-export interface Profile {
+export interface WebviewProfile {
   id: string;
   name: string;
 }
 
-export type WebviewEvent = "did-navigate" | "title-updated" | "loading" | "favicon";
+export type WebviewEvent = "did-navigate" | "title-updated" | "loading" | "favicon-updated";
 
 /** 页面节点的不透明引用(driver 内部映射到 CDP backendNodeId 等);消费方只原样传回。 */
 export interface ElementRef {
@@ -107,8 +107,8 @@ export interface WebviewKernel {
   create(opts?: WebviewCreateOptions): Promise<WebviewHandle>;
   /** profile 注册表(共享登录态)。 */
   readonly profiles: {
-    list(): Promise<Profile[]>;
-    create(name: string): Promise<Profile>;
+    list(): Promise<WebviewProfile[]>;
+    create(name: string): Promise<WebviewProfile>;
     remove(id: string): Promise<void>;
   };
 }
@@ -212,12 +212,12 @@ import type {
   Disposable,
   ElementRef,
   ModuleSurface,
-  Profile,
   Rect,
   ScreenshotOptions,
   ScrollOptions,
   WebviewEvent,
   WebviewHandle,
+  WebviewProfile,
 } from "@boundary-desktop/contract";
 import type { StorageBackend } from "./capabilities.js";
 import type { TrackDisposable } from "./state-container.js";
@@ -288,17 +288,17 @@ export function wrapDriverView(view: DriverWebview, track: TrackDisposable): Web
 // ===========================================================================
 
 const PROFILES_KEY = "webview:profiles";
-const DEFAULT_PROFILE: Profile = { id: "default", name: "默认" };
+const DEFAULT_PROFILE: WebviewProfile = { id: "default", name: "默认" };
 
 interface PersistShape {
   seq: number;
-  profiles: Profile[];
+  profiles: WebviewProfile[];
 }
 
 export class ProfileRegistry {
   #backend: StorageBackend;
   #seq = 0;
-  #profiles: Profile[] = [DEFAULT_PROFILE];
+  #profiles: WebviewProfile[] = [DEFAULT_PROFILE];
   #loaded = false;
 
   constructor(backend: StorageBackend) {
@@ -320,14 +320,14 @@ export class ProfileRegistry {
     await this.#backend.set(PROFILES_KEY, shape);
   }
 
-  async list(): Promise<Profile[]> {
+  async list(): Promise<WebviewProfile[]> {
     await this.#ensureLoaded();
     return [...this.#profiles];
   }
 
-  async create(name: string): Promise<Profile> {
+  async create(name: string): Promise<WebviewProfile> {
     await this.#ensureLoaded();
-    const profile: Profile = { id: `p${++this.#seq}`, name };
+    const profile: WebviewProfile = { id: `p${++this.#seq}`, name };
     this.#profiles.push(profile);
     await this.#persist();
     return profile;
@@ -504,7 +504,7 @@ Expected: FAIL(`caps.webview` 不存在 / `HostServicesOptions.webview` 未知)�
 (a) 顶部 import 补上类型与本地模块:
 
 ```ts
-import type { Profile, WebviewKernel } from "@boundary-desktop/contract";
+import type { WebviewKernel } from "@boundary-desktop/contract";
 import { ProfileRegistry, wrapDriverView, type WebviewDriver } from "./webview.js";
 ```
 
@@ -557,7 +557,7 @@ import { ProfileRegistry, wrapDriverView, type WebviewDriver } from "./webview.j
   }
 ```
 
-注:`Profile` import 若 TS 报未使用可去掉;`WebviewKernel` 用于返回类型标注。
+注:`WebviewKernel` 用于 `#buildWebview` 返回类型标注;profile 增删查只是委托 `ProfileRegistry`,capabilities.ts 不直接标注 `WebviewProfile`。
 
 - [ ] **Step 5: 跑 host 全测 + 契约 typecheck**
 
