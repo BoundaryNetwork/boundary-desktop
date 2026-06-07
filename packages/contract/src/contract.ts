@@ -182,6 +182,9 @@ export interface BaseContext {
    *  热替换后新版本用同一命名空间读回 —— 这是"状态外置"的正面用法。
    *  注意:敏感数据(凭证等)不放这里,它们属于 auth、由基座持有。 */
   storage: StorageScope;
+  /** 通用「原生网页渲染 + 驱动」能力(WebView Kernel)。所有 runtime 可用,用不用随你;
+   *  renderer 模块经 IPC bounce 到主进程。无窗口的 headless 环境下 create 抛错、profiles 仍可用。 */
+  readonly webview: WebviewKernel;
 }
 
 export interface ApiRequest {
