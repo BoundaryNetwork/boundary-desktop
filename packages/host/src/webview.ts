@@ -48,23 +48,30 @@ export interface WebviewDriver {
   create(opts: DriverCreateOptions): Promise<DriverWebview>;
 }
 
-/** 把 driver 产物包成契约 WebviewHandle:dispose 绑到激活 track,deactivate 自动销毁 view。
- *  destroy 做幂等保护——dispose 可能被消费方提前调一次、框架 deactivate 再调一次(契约允许),
- *  不加保护会二次 destroy native view。 */
+/** 把 driver 产物包成契约 WebviewHandle:整体 teardown 绑到激活 track,deactivate 自动回收。
+ *  teardown 顺序固定为「先退订全部 on/cdp.on 订阅,再 view.destroy()」——避免 native view
+ *  销毁时同步抛出的事件回打到尚未退订的监听器上(模块此刻已在拆除中)。
+ *  teardown 幂等:消费方可提前 dispose 一次、框架 deactivate 再调一次(契约允许),二次不重复销毁。 */
 export function wrapDriverView(view: DriverWebview, track: TrackDisposable): WebviewHandle {
-  let destroyed = false;
-  const destroyOnce = (): void => {
-    if (destroyed) return;
-    destroyed = true;
-    view.destroy();
+  const subs: Disposable[] = [];
+  const trackSub = (d: Disposable): Disposable => {
+    subs.push(d);
+    return d;
   };
-  const lifecycle = track({ dispose: destroyOnce });
+  let torn = false;
+  const teardown = (): void => {
+    if (torn) return;
+    torn = true;
+    for (const s of subs) s.dispose(); // 先退订
+    view.destroy(); // 再销毁
+  };
+  const lifecycle = track({ dispose: teardown });
   return {
     navigate: (url) => view.navigate(url),
     setBounds: (rect) => view.setBounds(rect),
     setVisible: (v) => view.setVisible(v),
     setInteractive: (on) => view.setInteractive(on),
-    on: (event, listener) => track(view.on(event, listener)),
+    on: (event, listener) => trackSub(view.on(event, listener)),
     find: (selector) => view.find(selector),
     click: (target) => view.click(target),
     type: (target, text) => view.type(target, text),
@@ -74,7 +81,7 @@ export function wrapDriverView(view: DriverWebview, track: TrackDisposable): Web
     eval: <T = unknown>(expr: string) => view.eval<T>(expr),
     cdp: {
       send: (method, params) => view.cdp.send(method, params),
-      on: (event, listener) => track(view.cdp.on(event, listener)),
+      on: (event, listener) => trackSub(view.cdp.on(event, listener)),
     },
     dispose: () => lifecycle.dispose(),
   };
@@ -85,7 +92,9 @@ export function wrapDriverView(view: DriverWebview, track: TrackDisposable): Web
 // 经 StorageBackend 持久化(原始 backend,不按模块命名空间;跨模块共享)。
 // ===========================================================================
 
-const PROFILES_KEY = "webview:profiles";
+// 保留前缀:host 级共享键,不走模块命名空间。`__host__:` 不是合法模块 id(kebab-case 无下划线),
+// 故与任何模块经 ctx.storage 写的键结构性不撞(NamespacedStorage 用 `<moduleId>:` 前缀)。
+const PROFILES_KEY = "__host__:webview:profiles";
 const DEFAULT_PROFILE: WebviewProfile = { id: "default", name: "默认" };
 
 interface PersistShape {

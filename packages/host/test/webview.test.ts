@@ -141,4 +141,44 @@ describe("HostServices.webview", () => {
     await expect(caps.webview.create()).rejects.toThrow(/WebviewDriver/);
     expect(await caps.webview.profiles.list()).toHaveLength(1);
   });
+
+  test("deactivate 先退订 on/cdp.on 订阅,再销毁 view", async () => {
+    const order: string[] = [];
+    const sub = (tag: string): Disposable => ({ dispose: () => order.push(tag) });
+    const driver: WebviewDriver = {
+      async create() {
+        return {
+          async navigate() {},
+          setBounds() {},
+          setVisible() {},
+          setInteractive() {},
+          on: () => sub("unsub:on"),
+          async find() {
+            return null;
+          },
+          async click() {},
+          async type() {},
+          async upload() {},
+          async scroll() {},
+          async screenshot() {
+            return new Uint8Array();
+          },
+          async eval<T>() {
+            return undefined as T;
+          },
+          cdp: { send: async () => null, on: () => sub("unsub:cdp") },
+          destroy() {
+            order.push("destroy");
+          },
+        } satisfies DriverWebview;
+      },
+    };
+    const host = new HostServices({ webview: driver });
+    const { caps, dispose } = forModuleWith(host);
+    const handle = await caps.webview.create();
+    handle.on("did-navigate", () => {});
+    handle.cdp.on("Page.frameNavigated", () => {});
+    dispose(); // 模拟 deactivate
+    expect(order).toEqual(["unsub:on", "unsub:cdp", "destroy"]);
+  });
 });
