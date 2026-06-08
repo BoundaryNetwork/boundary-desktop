@@ -3,8 +3,8 @@
 // Phase 2b:多标签(TabStore + TabViewHost)+ 标签条 + 地址栏导航。CDP/工具/自动化留后续。
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Menu, type MenuItemConstructorOptions, app, type WebContents, WebContentsView, ipcMain } from "electron";
-import { defineModule, type Disposable, type MainContext, type Rect } from "@boundary-desktop/contract";
+import { Menu, type MenuItemConstructorOptions, app, WebContentsView, ipcMain } from "electron";
+import { defineModule, type Disposable, type MainContext, type Rect, type WebviewHandle } from "@boundary-desktop/contract";
 import { CH, type ChromeState, type GroupColor, type TabMeta } from "./ipc.js";
 import { TabStore } from "./tab-store.js";
 import { TabViewHost } from "./tab-view-host.js";
@@ -20,9 +20,8 @@ let host: TabViewHost | null = null;
 let runner: Runner | null = null;
 let surface: MainContext["surface"] = undefined;
 let theme: "light" | "dark" = "light";
-let profileSeq = 0;
-const profiles = new Map<string, string>([["default", "默认"]]); // 账号(profile)id → 名;各自分区隔离
-let persistProfiles: () => void = () => {}; // 把 profiles + 当前账号写入 ctx.storage(跨重启留存)
+let profilesApi: MainContext["webview"]["profiles"] | null = null; // 账号注册表(共享登录态),由 kernel 持有
+let currentProfileName = "默认"; // 当前账号显示名(喂 chrome 工具栏)
 const cleanups: Array<() => void> = [];
 
 export default defineModule<MainContext>({
@@ -32,16 +31,8 @@ export default defineModule<MainContext>({
     const s = surface;
     theme = s.theme.get();
 
-    // 账号(profile)跨重启留存:回载已存账号 + 当前账号(经持久化的 ctx.storage);后续变更落盘。
-    persistProfiles = () => {
-      void ctx.storage.set("profiles", { list: [...profiles.entries()], current: store?.currentProfile() ?? "default" });
-    };
-    const savedProfiles = await ctx.storage.get<{ list: [string, string][]; current: string }>("profiles");
-    if (savedProfiles?.list?.length) {
-      profiles.clear();
-      for (const [id, name] of savedProfiles.list) profiles.set(id, name);
-      profileSeq = savedProfiles.list.length; // 续号,避免新账号 id 撞已存
-    }
+    // 账号注册表迁到 kernel(共享登录态、跨重启留存由基座负责);模块只持当前账号显示名。
+    profilesApi = ctx.webview.profiles;
 
     // chrome 条:模块自带的 toolbar 渲染页,经 app:// + import map 载入(react 走宿主 vendor)。
     chromeView = new WebContentsView({
@@ -68,27 +59,32 @@ export default defineModule<MainContext>({
       broadcast();
     });
     host = new TabViewHost({
-      attach: (v) => s.attach(v),
-      bg: () => (theme === "dark" ? "#1b1e25" : "#ffffff"),
+      create: (opts) => ctx.webview.create({ ...opts, surface: s }),
       startPage: newtabUrl,
       onNav: (id, patch) => store!.update(id, patch),
     });
-    if (savedProfiles?.current && profiles.has(savedProfiles.current)) store.setCurrentProfile(savedProfiles.current);
-    store.open(""); // 初始一个新标签页(用回载的当前账号)
+    store.open(""); // 初始一个新标签页(用 default 账号)
 
-    // 账号(profile)切换:不存在则建 + 落盘;切当前账号(新标签据此分区隔离 cookie/storage)。
-    // 让 agent 调用时可传任意 profile 获得独立隔离会话(如不同店铺账号)。
-    const useProfile = (id: string): void => {
-      if (!profiles.has(id)) profiles.set(id, id);
-      if (store!.currentProfile() !== id) store!.setCurrentProfile(id);
-      persistProfiles();
+    // 账号(profile)切换:把入参当账号标签——按 id 或名匹配 kernel 已存账号,缺则新建(kernel 生成 id)。
+    // 切当前账号后新标签据此 profileId 分区隔离 cookie/storage。让 agent 可传任意账号获得独立隔离会话。
+    const resolveProfile = async (label: string): Promise<{ id: string; name: string }> => {
+      const list = await profilesApi!.list();
+      const hit = list.find((p) => p.id === label || p.name === label);
+      return hit ?? (await profilesApi!.create(label));
+    };
+    const useProfile = async (label: string): Promise<void> => {
+      const p = await resolveProfile(label);
+      if (store!.currentProfile() !== p.id) {
+        store!.setCurrentProfile(p.id);
+        currentProfileName = p.name;
+      }
     };
     const openTab = (url: string, profile?: string): number => {
-      if (profile) useProfile(profile);
+      if (profile) void useProfile(profile);
       return store!.open(url);
     };
-    const listProfiles = (): { id: string; name: string; current: boolean }[] =>
-      [...profiles.entries()].map(([id, name]) => ({ id, name, current: id === store!.currentProfile() }));
+    const listProfiles = async (): Promise<{ id: string; name: string; current: boolean }[]> =>
+      (await profilesApi!.list()).map((p) => ({ id: p.id, name: p.name, current: p.id === store!.currentProfile() }));
 
     // 对外能力:注册 browser.* 工具(自动加前缀,经 WS/MCP/CLI 门面暴露;句柄由 ctx 自动回收)。
     for (const def of browserTools({ active: () => active(), openTab, listProfiles, foreground: () => s.requestForeground() })) {
@@ -110,7 +106,6 @@ export default defineModule<MainContext>({
       s.theme.subscribe((t) => {
         theme = t;
         chromeView?.setBackgroundColor(theme === "dark" ? "#1b1e25" : "#ffffff");
-        host?.repaint();
         broadcast();
       }),
     );
@@ -119,10 +114,10 @@ export default defineModule<MainContext>({
     // chrome 页 → main 指令(仅采信 chrome 页自身的发送者)。
     listen(CH.ready, (e) => chrome(e) && broadcast()); // 页面订阅就绪 → 推当前全量态
     listen(CH.navigate, (e, url) => {
-      if (chrome(e) && typeof url === "string" && url) void active()?.loadURL(url);
+      if (chrome(e) && typeof url === "string" && url) void active()?.navigate(url);
     });
-    listen(CH.back, (e) => chrome(e) && active()?.navigationHistory.goBack());
-    listen(CH.forward, (e) => chrome(e) && active()?.navigationHistory.goForward());
+    listen(CH.back, (e) => chrome(e) && active()?.goBack());
+    listen(CH.forward, (e) => chrome(e) && active()?.goForward());
     listen(CH.reload, (e) => chrome(e) && active()?.reload());
     listen(CH.newTab, (e) => chrome(e) && store!.open(""));
     listen(CH.switchTab, (e, id) => chrome(e) && typeof id === "number" && store!.switch(id));
@@ -152,7 +147,9 @@ export default defineModule<MainContext>({
         store!.dragTab(p.tabId, beforeId, groupId);
       }
     });
-    listen(CH.profileMenu, (e) => chrome(e) && showProfileMenu());
+    listen(CH.profileMenu, (e) => {
+      if (chrome(e)) void showProfileMenu();
+    });
   },
 
   deactivate() {
@@ -164,6 +161,8 @@ export default defineModule<MainContext>({
     host = null;
     runner = null;
     surface = undefined;
+    profilesApi = null;
+    currentProfileName = "默认";
   },
 });
 
@@ -195,21 +194,23 @@ function broadcast(): void {
     activeTabId: snap.activeTabId,
     theme,
     detached: surface?.detached.get() ?? false,
-    currentProfile: profiles.get(store.currentProfile()) ?? store.currentProfile(),
+    currentProfile: currentProfileName,
   };
   cwc.send(CH.state, state);
 }
 
 /** 账号(profile)切换原生菜单:列出现有账号(✓ 当前)+ 新建账号。新建即切到该账号,
- *  后续新标签页用其分区(persist:browser-<id>),与其它账号 cookie/storage 隔离。 */
-function showProfileMenu(): void {
-  if (!store) return;
+ *  后续新标签页用其分区(persist:wv-<id>),与其它账号 cookie/storage 隔离。 */
+async function showProfileMenu(): Promise<void> {
+  if (!store || !profilesApi) return;
   const cur = store.currentProfile();
-  const items: MenuItemConstructorOptions[] = [...profiles.entries()].map(([id, name]) => ({
-    label: (id === cur ? "✓ " : "  ") + name,
+  const list = await profilesApi.list();
+  const items: MenuItemConstructorOptions[] = list.map((p) => ({
+    label: (p.id === cur ? "✓ " : "  ") + p.name,
     click: () => {
-      store?.setCurrentProfile(id);
-      persistProfiles();
+      store?.setCurrentProfile(p.id);
+      currentProfileName = p.name;
+      broadcast();
     },
   }));
   items.push(
@@ -217,10 +218,12 @@ function showProfileMenu(): void {
     {
       label: "新建账号",
       click: () => {
-        const id = `profile-${++profileSeq}`;
-        profiles.set(id, `账号 ${profiles.size}`);
-        store?.setCurrentProfile(id);
-        persistProfiles();
+        void (async () => {
+          const p = await profilesApi!.create(`账号 ${list.length + 1}`);
+          store?.setCurrentProfile(p.id);
+          currentProfileName = p.name;
+          broadcast();
+        })();
       },
     },
   );
@@ -265,8 +268,8 @@ function showTabMenu(tabId: unknown): void {
   Menu.buildFromTemplate(items).popup();
 }
 
-function active(): WebContents | null {
-  return host?.webContents(store?.activeId() ?? null) ?? null;
+function active(): WebviewHandle | null {
+  return host?.handle(store?.activeId() ?? null) ?? null;
 }
 
 function chrome(e: Electron.IpcMainEvent): boolean {

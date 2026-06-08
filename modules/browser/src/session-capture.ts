@@ -1,7 +1,6 @@
 // 接口响应采集(港 openclaw automation/session-capture.ts)。
 // 经 CDP Network 域抓匹配 url 的 JSON/JSONP 响应,按 SessionSpec 抽行累积,支持上限与翻页判定。
-import type { WebContents } from "electron";
-import { ensureAttached } from "./automation.js";
+import type { WebviewHandle } from "@boundary-desktop/contract";
 import { extractRows, readHasNext } from "./jsonpath.js";
 import type { SessionSpec } from "./script-types.js";
 
@@ -88,18 +87,16 @@ export class SessionCollector {
 }
 
 /** 挂上 Network 拦截,把匹配响应喂给 collector;返回解绑函数。
- *  注意:必须先 attach debugger 再 enable Network,否则首步采集时管道未就绪、采集恒为 0。 */
-export function attachCapture(wc: WebContents, collector: SessionCollector): () => void {
-  ensureAttached(wc);
-  void wc.debugger.sendCommand("Network.enable").catch(() => {});
-  const onMessage = (_e: unknown, method: string, params: unknown): void => {
-    if (method !== "Network.responseReceived") return;
+ *  注意:driver 已 attach debugger,这里只需 enable Network,否则首步采集时管道未就绪、采集恒为 0。 */
+export function attachCapture(view: WebviewHandle, collector: SessionCollector): () => void {
+  void view.cdp.send("Network.enable").catch(() => {});
+  const sub = view.cdp.on("Network.responseReceived", (params) => {
     const p = params as { response: { url: string; mimeType: string }; requestId: string };
     const key = collector.shouldCapture(p.response.url);
     if (!key) return;
     if (!/json|javascript/i.test(p.response.mimeType)) return;
-    void wc.debugger
-      .sendCommand("Network.getResponseBody", { requestId: p.requestId })
+    void view.cdp
+      .send("Network.getResponseBody", { requestId: p.requestId })
       .then((r) => {
         try {
           collector.ingestRaw(key, (r as { body: string }).body);
@@ -108,10 +105,9 @@ export function attachCapture(wc: WebContents, collector: SessionCollector): () 
         }
       })
       .catch(() => {});
-  };
-  wc.debugger.on("message", onMessage);
+  });
   return () => {
-    wc.debugger.removeListener("message", onMessage);
-    if (!wc.isDestroyed()) void wc.debugger.sendCommand("Network.disable").catch(() => {});
+    sub.dispose();
+    void view.cdp.send("Network.disable").catch(() => {}); // view 已销毁则 cdp 调用 reject,吞掉
   };
 }

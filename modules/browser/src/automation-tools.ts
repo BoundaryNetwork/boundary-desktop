@@ -1,5 +1,4 @@
-import type { ToolDefinition } from "@boundary-desktop/contract";
-import type { WebContents } from "electron";
+import type { ToolDefinition, WebviewHandle } from "@boundary-desktop/contract";
 import { runScript } from "./dsl-engine.js";
 import { loadScripts } from "./script-loader.js";
 import type { Runner } from "./runner.js";
@@ -9,7 +8,7 @@ const SYNC_WINDOW = 55_000; // ≤55s 完成则同步返结果,否则返 runId �
 
 interface Deps {
   scriptsDir: string;
-  active: () => WebContents | null;
+  active: () => WebviewHandle | null;
   runner: Runner;
   /** 新建标签并设为活动,返回 id;指定 profile 则在该账号(不存在自动建)隔离会话中打开。 */
   openTab: (url: string, profile?: string) => number;

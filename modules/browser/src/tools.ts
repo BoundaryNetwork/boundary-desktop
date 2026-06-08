@@ -1,14 +1,13 @@
-import type { ToolDefinition } from "@boundary-desktop/contract";
-import type { WebContents } from "electron";
+import type { ToolDefinition, WebviewHandle } from "@boundary-desktop/contract";
 import { click, findElement, interceptNext, setInputFiles, typeText } from "./automation.js";
 
 interface ToolDeps {
-  /** 当前活动标签的 webContents(无则 null)。 */
-  active: () => WebContents | null;
+  /** 当前活动标签的 view 句柄(无则 null)。 */
+  active: () => WebviewHandle | null;
   /** 新建标签并设为活动,返回 id;指定 profile 则在该账号(不存在自动建)隔离会话中打开。 */
   openTab: (url: string, profile?: string) => number;
   /** 列出账号(profile):id / 名 / 是否当前。 */
-  listProfiles: () => { id: string; name: string; current: boolean }[];
+  listProfiles: () => Promise<{ id: string; name: string; current: boolean }[]>;
   /** 请求把浏览器区域提到前台(agent 驱动导航时浮出给用户看)。 */
   foreground: () => void;
 }
@@ -53,14 +52,14 @@ const SNAPSHOT_FN = String.raw`function(max){
 
 /** 浏览器能力工具。注册时框架自动加 `browser.` 前缀,经 WS/MCP/CLI 门面 list/invoke;
  *  handler 在主进程直接驱动活动标签,无跨进程往返。click/type/upload/intercept_next 经
- *  webContents.debugger 发 CDP,合成可信输入(反检测)。 */
+ *  kernel WebviewHandle 的 cdp 通道,合成可信输入(反检测)。 */
 export function browserTools(deps: ToolDeps): ToolDefinition[] {
-  const wc = (): WebContents => {
+  const h = (): WebviewHandle => {
     const w = deps.active();
-    if (!w || w.isDestroyed()) throw new Error("无活动标签");
+    if (!w) throw new Error("无活动标签");
     return w;
   };
-  const js = (code: string): Promise<unknown> => wc().executeJavaScript(code, true);
+  const js = (code: string): Promise<unknown> => h().eval(code);
 
   return [
     {
@@ -77,7 +76,7 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       name: "profiles",
       description: "列出账号(profile)——各账号 cookie/storage 隔离;new_tab/automation_run 可按 id 指定",
       schema: { type: "object", properties: {} },
-      handler: async () => ({ profiles: deps.listProfiles() }),
+      handler: async () => ({ profiles: await deps.listProfiles() }),
     },
     {
       name: "navigate",
@@ -86,12 +85,10 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       handler: async (a) => {
         const url = str(a, "url");
         if (!url) throw new Error("navigate 需要 url");
-        const w = wc();
+        const w = h();
         deps.foreground(); // 浮出浏览器,让用户看着 agent 导航
-        await w.loadURL(url).catch((e: unknown) => {
-          if (!String(e).includes("ERR_ABORTED")) throw e; // 重定向取消属正常
-        });
-        return { url: w.getURL(), title: w.getTitle() };
+        await w.navigate(url); // driver 已内含 ERR_ABORTED 容错
+        return { ok: true }; // 地址/标题由 chrome 工具栏经 did-navigate 事件更新
       },
     },
     {
@@ -119,10 +116,8 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       description: "截取当前页面,作为图片返回(缩放到≤1024宽的 JPEG,省 token)",
       schema: { type: "object", properties: {} },
       handler: async () => {
-        const img = await wc().capturePage();
-        // 缩到 ≤1024 宽再转 JPEG:原分辨率 PNG 体积巨大;门面据 mimeType 映射成 MCP image 内容。
-        const scaled = img.getSize().width > 1024 ? img.resize({ width: 1024 }) : img;
-        return { mimeType: "image/jpeg", data: scaled.toJPEG(70).toString("base64") };
+        // driver screenshot 已缩放成 ≤1024 宽的 JPEG(省 token);门面据 mimeType 映射成 MCP image 内容。
+        return { mimeType: "image/jpeg", data: Buffer.from(await h().screenshot()).toString("base64") };
       },
     },
     {
@@ -178,8 +173,8 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       description: "点击元素(selector 或 text 匹配,CDP 合成可信点击)",
       schema: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } } },
       handler: async (a) => {
-        const c = await findElement(wc(), { selector: str(a, "selector"), text: str(a, "text") });
-        await click(wc(), c.x, c.y);
+        const c = await findElement(h(), { selector: str(a, "selector"), text: str(a, "text") });
+        await click(h(), c.x, c.y);
         return { ok: true };
       },
     },
@@ -197,10 +192,10 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
         const sel = str(a, "selector");
         const find = str(a, "text_to_find");
         if (sel || find) {
-          const c = await findElement(wc(), { selector: sel, text: find });
-          await click(wc(), c.x, c.y); // 聚焦
+          const c = await findElement(h(), { selector: sel, text: find });
+          await click(h(), c.x, c.y); // 聚焦
         }
-        await typeText(wc(), text);
+        await typeText(h(), text);
         return { ok: true };
       },
     },
@@ -215,7 +210,7 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       handler: async (a) => {
         const sel = str(a, "selector");
         if (!sel) throw new Error("upload 需要 selector");
-        await setInputFiles(wc(), sel, strArr(a, "filePaths"));
+        await setInputFiles(h(), sel, strArr(a, "filePaths"));
         return { ok: true };
       },
     },
@@ -230,7 +225,7 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       handler: async (a) => {
         const pat = str(a, "urlPattern");
         if (!pat) throw new Error("intercept_next 需要 urlPattern");
-        return interceptNext(wc(), pat, num(a, "timeout") ?? 30000);
+        return interceptNext(h(), pat, num(a, "timeout") ?? 30000);
       },
     },
   ];
