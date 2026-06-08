@@ -65,8 +65,8 @@ export class RendererBridge {
   deactivate(aid: number): Promise<void> {
     return this.#request(IPC.rtDeactivate, { aid });
   }
-  invokeRendererTool(aid: number, name: string, args: unknown): Promise<unknown> {
-    return this.#request(IPC.rtToolInvoke, { aid, name, args });
+  invokeRendererTool(aid: number, name: string, args: unknown, caller: string | null): Promise<unknown> {
+    return this.#request(IPC.rtToolInvoke, { aid, name, args, caller });
   }
   pushShared(shared: unknown): void {
     this.#wc?.send(IPC.sharedChanged, shared);

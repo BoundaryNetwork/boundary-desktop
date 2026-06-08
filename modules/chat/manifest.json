@@ -2,7 +2,7 @@
   "id": "chat",
   "version": "0.1.0",
   "runtime": "renderer",
-  "hostApiVersion": "^0.3.0",
+  "hostApiVersion": "^0.4.0",
   "entry": "dist/index.mjs",
   "integrity": "",
   "ui": {

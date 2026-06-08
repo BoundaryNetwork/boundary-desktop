@@ -95,9 +95,16 @@ export function defineModule<Ctx extends BaseContext = BaseContext>(
 // 3. tool 注册相关类型
 // ===========================================================================
 
+/** 一次 tool 调用的来源信息,由基座在调用点注入(不可由调用方伪造)。 */
+export interface ToolInvocation {
+  /** 发起调用的 module id;经对外门面(WS/MCP/CLI)等非模块来源调用时为 null。 */
+  caller: string | null;
+}
+
 /** handler 写法对 runtime 透明:module 当自己在本地被调用即可。
- *  runtime=main 由基座直接调;runtime=renderer 由基座经 IPC 转发到渲染进程执行。 */
-export type ToolHandler = (args: unknown) => Promise<unknown>;
+ *  runtime=main 由基座直接调;runtime=renderer 由基座经 IPC 转发到渲染进程执行。
+ *  第二参 `inv` 是基座注入的调用来源,跨进程也由基座据 aid 还原,handler 据此识别谁在调。 */
+export type ToolHandler = (args: unknown, inv: ToolInvocation) => Promise<unknown>;
 
 export interface ToolDefinition {
   /** 裸名(如 "search")。基座登记时自动加 `<module.id>.` 前缀,module 碰不到前缀。 */

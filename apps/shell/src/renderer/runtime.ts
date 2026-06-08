@@ -54,7 +54,7 @@ class RendererRuntime {
     const b = window.moduleBridge;
     b.onActivate((req) => this.#activate(req));
     b.onDeactivate((aid) => this.#deactivate(aid));
-    b.onToolInvoke((aid, name, args) => this.#invoke(aid, name, args));
+    b.onToolInvoke((aid, name, args, caller) => this.#invoke(aid, name, args, caller));
     b.onSharedChanged((s) => {
       this.#shared = s;
       for (const l of [...this.#sharedListeners]) l();
@@ -97,10 +97,10 @@ class RendererRuntime {
     }
   }
 
-  async #invoke(aid: number, name: string, args: unknown): Promise<unknown> {
+  async #invoke(aid: number, name: string, args: unknown, caller: string | null): Promise<unknown> {
     const handler = this.#active.get(aid)?.handlers.get(name);
     if (!handler) throw new Error(`模块 aid=${aid} 无 tool ${name}`);
-    return handler(args);
+    return handler(args, { caller });
   }
 
   #readable<T>(get: () => T): ReadableState<T> {

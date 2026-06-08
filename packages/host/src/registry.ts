@@ -197,7 +197,8 @@ export class Registry implements IModuleRegistry {
   }
 
   invokeTool(name: string, args: unknown): Promise<unknown> {
-    return this.#tools.invoke(name, args);
+    // 对外门面(WS/MCP/CLI)等非模块来源:caller 记 null。
+    return this.#tools.invoke(name, args, null);
   }
 
   /** tool 集合的变更计数，断线重连后对账用。 */
@@ -297,8 +298,9 @@ export class Registry implements IModuleRegistry {
       ...capabilities,
       registerTool: (def) =>
         track(this.#tools.register(token, manifest.id, manifest.runtime, def)),
+      // caller 由本 ctx 所属 module 的 id 派生(非调用方自报),跨进程的 renderer 调用也经 aid→此 ctx 还原。
       invokeTool: <T = unknown>(name: string, args: unknown): Promise<T> =>
-        this.#tools.invoke(name, args) as Promise<T>,
+        this.#tools.invoke(name, args, manifest.id) as Promise<T>,
       on: (event, listener) => {
         const set = this.#subscriptions.get(event) ?? new Set();
         set.add(listener);

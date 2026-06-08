@@ -59,14 +59,15 @@ export class ToolRegistry {
     this.#onChange();
   }
 
-  /** 调用栈顶 handler。进出账本按栈顶 entry 的 token 记，供 drain 归属。 */
-  async invoke(fullName: string, args: unknown): Promise<unknown> {
+  /** 调用栈顶 handler。进出账本按栈顶 entry 的 token 记，供 drain 归属。
+   *  caller 为发起调用的 module id（对外门面等非模块来源为 null），原样注入 handler 第二参。 */
+  async invoke(fullName: string, args: unknown, caller: string | null): Promise<unknown> {
     const stack = this.#stacks.get(fullName);
     const entry = stack?.[stack.length - 1];
     if (!entry) throw new Error(`tool 未注册：${fullName}`);
     this.#ledger.enter(entry.ownerToken);
     try {
-      return await entry.def.handler(args);
+      return await entry.def.handler(args, { caller });
     } finally {
       this.#ledger.leave(entry.ownerToken);
     }

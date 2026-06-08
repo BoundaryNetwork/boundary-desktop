@@ -7,4 +7,4 @@
  *
  * 约定:与本包 package.json 的 `version` 同步演进(见 docs/架构设计.md 11.2)。
  */
-export const HOST_API_VERSION = "0.3.0";
+export const HOST_API_VERSION = "0.4.0";
