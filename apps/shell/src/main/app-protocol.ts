@@ -10,12 +10,16 @@ export function setVendorDir(dir: string): void {
 }
 
 /** 在 app ready 前把 app:// 注册成特权 scheme(standard + secure + 支持 fetch/stream),
- *  使渲染层可 import('app://...') 且不撞 https 远程的 CSP 限制。 */
+ *  使渲染层可 import('app://...') 且不撞 https 远程的 CSP 限制。
+ *  corsEnabled 必须置位:dev 下渲染源是 http://localhost,import('app://...') 属跨源——
+ *  Electron 42 / 新 Chromium 起,非内置 scheme 必须声明 corsEnabled 才纳入 CORS 流程,
+ *  否则在 handler 被调用前就以「Cross origin requests are only supported for ...」直接拦掉
+ *  (handler 里补的 Access-Control-Allow-Origin 根本没机会生效)。Electron 38 旧 Chromium 不需要。 */
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: "app",
-      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
     },
   ]);
 }

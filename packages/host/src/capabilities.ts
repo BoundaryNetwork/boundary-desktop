@@ -7,9 +7,11 @@ import type {
   NotifyOptions,
   StorageScope,
   UserInfo,
+  WebviewKernel,
 } from "@boundary-desktop/contract";
 import type { CapabilityHost, ModuleCapabilities } from "./registry.js";
 import { StateContainer, type TrackDisposable } from "./state-container.js";
+import { ProfileRegistry, wrapDriverView, type WebviewDriver } from "./webview.js";
 
 // ===========================================================================
 // 环境驱动 seam —— 基座与具体环境（Electron / 后端 / OS）的接触点。
@@ -127,6 +129,7 @@ export interface HostServicesOptions {
   logger?: Logger;
   initialConfig?: Record<string, unknown>;
   initialNetwork?: NetworkState;
+  webview?: WebviewDriver;
 }
 
 export class HostServices implements CapabilityHost {
@@ -140,6 +143,8 @@ export class HostServices implements CapabilityHost {
   #token: string | null = null;
   #config: StateContainer<Record<string, unknown>>;
   #network: StateContainer<NetworkState>;
+  #webviewDriver?: WebviewDriver;
+  #profiles: ProfileRegistry;
 
   constructor(opts: HostServicesOptions = {}) {
     this.#storage = opts.storage ?? new MemoryStorageBackend();
@@ -149,6 +154,8 @@ export class HostServices implements CapabilityHost {
     this.#logger = opts.logger ?? consoleLogger;
     this.#config = new StateContainer(opts.initialConfig ?? {});
     this.#network = new StateContainer(opts.initialNetwork ?? { online: true, connected: false });
+    this.#webviewDriver = opts.webview;
+    this.#profiles = new ProfileRegistry(this.#storage);
   }
 
   // 基座 / Electron 侧驱动共享状态（模块只读，写在这里）
@@ -212,6 +219,27 @@ export class HostServices implements CapabilityHost {
         track: (event, props) => this.#logger.track(event, withSelf(props)),
       },
       storage: new NamespacedStorage(this.#storage, self.id),
+      webview: this.#buildWebview(track),
+    };
+  }
+
+  #buildWebview(track: TrackDisposable): WebviewKernel {
+    const driver = this.#webviewDriver;
+    return {
+      create: async (opts) => {
+        if (!driver) throw new Error("未配置 WebviewDriver：无法创建网页 view");
+        const view = await driver.create({
+          partition: this.#profiles.resolvePartition(opts?.profileId),
+          interactive: opts?.interactive ?? true,
+          surface: opts?.surface,
+        });
+        return wrapDriverView(view, track);
+      },
+      profiles: {
+        list: () => this.#profiles.list(),
+        create: (name: string) => this.#profiles.create(name),
+        remove: (id: string) => this.#profiles.remove(id),
+      },
     };
   }
 }

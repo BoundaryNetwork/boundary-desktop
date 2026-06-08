@@ -1,19 +1,11 @@
 // CDP 自动化原语(从 openclaw AutomationEngine 平移,去掉调试 overlay / tagMode 等附加项):
-// 经 webContents.debugger 发 CDP,合成可信输入(反检测)。供 browser.{click,type,upload,intercept_next} 用。
+// 经 kernel WebviewHandle 的 cdp/eval 通道驱动,合成可信输入(反检测)。供 browser.{click,type,upload,intercept_next} 用。
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
-import type { WebContents } from "electron";
+import type { WebviewHandle } from "@boundary-desktop/contract";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
-
-export function ensureAttached(wc: WebContents): void {
-  try {
-    wc.debugger.attach("1.3");
-  } catch {
-    // 已 attach(同一 webContents 只能挂一个 debugger),忽略
-  }
-}
 
 export interface ElementTarget {
   selector?: string;
@@ -27,8 +19,7 @@ export interface Coords {
 }
 
 /** selector / text 定位元素,滚入视野,返回视口内中心坐标 + 尺寸(港 openclaw finder 的页内 JS)。 */
-export async function findElement(wc: WebContents, target: ElementTarget, scrollIntoView = true): Promise<Coords> {
-  ensureAttached(wc);
+export async function findElement(view: WebviewHandle, target: ElementTarget, scrollIntoView = true): Promise<Coords> {
   const expr = `(function(){
     var selector=${JSON.stringify(target.selector ?? "")}, text=${JSON.stringify(target.text ?? "")}, el=null;
     if(selector&&text){try{var ns=document.querySelectorAll(selector);for(var j=0;j<ns.length;j++){var t=(ns[j].innerText||ns[j].value||'').trim();if(t===text){el=ns[j];break;}}if(!el){for(var j=0;j<ns.length;j++){var t=(ns[j].innerText||ns[j].value||'').trim();if(t&&t.includes(text)){el=ns[j];break;}}}}catch(e){}}
@@ -39,10 +30,7 @@ export async function findElement(wc: WebContents, target: ElementTarget, scroll
     var r=el.getBoundingClientRect();if(r.width===0||r.height===0)return null;
     return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),width:Math.round(r.width),height:Math.round(r.height)};
   })()`;
-  const res = (await wc.debugger.sendCommand("Runtime.evaluate", { expression: expr, returnByValue: true })) as {
-    result?: { value?: Coords | null };
-  };
-  const v = res.result?.value;
+  const v = await view.eval<Coords | null>(expr);
   if (!v) throw new Error(`未找到元素: selector="${target.selector ?? ""}" text="${target.text ?? ""}"`);
   return v;
 }
@@ -58,10 +46,11 @@ function bezier(p0: P, p1: P, p2: P, p3: P, t: number): P {
     y: m * m * m * p0.y + 3 * m * m * t * p1.y + 3 * m * t * t * p2.y + t * t * t * p3.y,
   };
 }
-let cursor: P = { x: 100, y: 100 };
+// 每个 view 一份光标位置:多标签并发驱动各自独立、不互污;随 handle 被 GC 自动回收。
+const cursors = new WeakMap<WebviewHandle, P>();
 
-export async function moveTo(wc: WebContents, x: number, y: number): Promise<void> {
-  ensureAttached(wc);
+export async function moveTo(view: WebviewHandle, x: number, y: number): Promise<void> {
+  const cursor = cursors.get(view) ?? { x: 100, y: 100 };
   const dx = x - cursor.x;
   const dy = y - cursor.y;
   const dist = Math.hypot(dx, dy);
@@ -79,7 +68,7 @@ export async function moveTo(wc: WebContents, x: number, y: number): Promise<voi
       const t = i / steps;
       const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
       const p = bezier(start, cp1, cp2, target, eased);
-      await wc.debugger.sendCommand("Input.dispatchMouseEvent", {
+      await view.cdp.send("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x: Math.round(p.x + rand(-1.5, 1.5)),
         y: Math.round(p.y + rand(-1.5, 1.5)),
@@ -88,26 +77,25 @@ export async function moveTo(wc: WebContents, x: number, y: number): Promise<voi
       await sleep(rand(8, 16));
     }
   }
-  cursor = { x, y };
+  cursors.set(view, { x, y });
 }
 
-export async function click(wc: WebContents, x: number, y: number): Promise<void> {
-  await moveTo(wc, x, y);
+export async function click(view: WebviewHandle, x: number, y: number): Promise<void> {
+  await moveTo(view, x, y);
   await sleep(rand(60, 150));
-  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0 });
+  await view.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0 });
   await sleep(rand(40, 90));
-  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+  await view.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
 }
 
 /** 在 (x,y) 处人类化滚轮 deltaY(港 openclaw mouse.scroll,去 overlay):
  *  先把锚点小幅抖动后 moveTo,再分多段加权下发 mouseWheel,放慢节奏避免风控。 */
-export async function scroll(wc: WebContents, x: number, y: number, deltaY: number, humanize = true): Promise<void> {
-  ensureAttached(wc);
+export async function scroll(view: WebviewHandle, x: number, y: number, deltaY: number, humanize = true): Promise<void> {
   const jx = Math.round(x + rand(-20, 20));
   const jy = Math.round(y + rand(-20, 20));
-  await moveTo(wc, jx, jy);
+  await moveTo(view, jx, jy);
   if (!humanize) {
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY, modifiers: 0 });
+    await view.cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY, modifiers: 0 });
     return;
   }
   const steps = Math.max(8, Math.min(20, Math.round(Math.abs(deltaY) / 50)));
@@ -120,16 +108,15 @@ export async function scroll(wc: WebContents, x: number, y: number, deltaY: numb
   }
   for (let i = 0; i < steps; i++) {
     const stepDelta = Math.round((deltaY * weights[i]!) / sum);
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY: stepDelta, modifiers: 0 });
+    await view.cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: jx, y: jy, deltaX: 0, deltaY: stepDelta, modifiers: 0 });
     await sleep(rand(40, 110));
   }
 }
 
 const NEAR = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-export async function typeText(wc: WebContents, text: string, humanize = true): Promise<void> {
-  ensureAttached(wc);
-  const insert = (c: string): Promise<unknown> => wc.debugger.sendCommand("Input.insertText", { text: c });
+export async function typeText(view: WebviewHandle, text: string, humanize = true): Promise<void> {
+  const insert = (c: string): Promise<unknown> => view.cdp.send("Input.insertText", { text: c });
   if (!humanize) {
     await insert(text);
     return;
@@ -138,8 +125,8 @@ export async function typeText(wc: WebContents, text: string, humanize = true): 
     if (Math.random() < 0.03) {
       await insert(NEAR[Math.floor(Math.random() * NEAR.length)]!);
       await sleep(rand(180, 320));
-      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 });
-      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 });
+      await view.cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 });
+      await view.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 });
       await sleep(rand(80, 150));
     }
     await insert(ch);
@@ -158,7 +145,7 @@ const MIME: Record<string, string> = {
 };
 
 /** 经 DataTransfer 把文件注入隐藏 file input(兼容 React/Vue,无需触发文件选择框)。 */
-export async function setInputFiles(wc: WebContents, selector: string, filePaths: string[]): Promise<void> {
+export async function setInputFiles(view: WebviewHandle, selector: string, filePaths: string[]): Promise<void> {
   if (!filePaths.length) return;
   const files = filePaths.map((fp) => ({
     name: basename(fp),
@@ -166,50 +153,40 @@ export async function setInputFiles(wc: WebContents, selector: string, filePaths
     base64: readFileSync(fp).toString("base64"),
   }));
   const sel = selector.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-  const r = (await wc.executeJavaScript(`(async function(){
+  const r = await view.eval<{ ok: boolean; error?: string }>(`(async function(){
     var files=${JSON.stringify(files)};var input=document.querySelector('${sel}');if(!input)return {ok:false,error:'未找到 input'};
     var dt=new DataTransfer();for(var k=0;k<files.length;k++){var f=files[k],bin=atob(f.base64),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);dt.items.add(new File([u],f.name,{type:f.mimeType}));}
     Object.defineProperty(input,'files',{value:dt.files,writable:false,configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}));input.dispatchEvent(new Event('input',{bubbles:true}));return {ok:true};
-  })()`)) as { ok: boolean; error?: string };
+  })()`);
   if (!r?.ok) throw new Error(`文件注入失败: ${r?.error ?? "未知"}`);
 }
 
 /** 等待并拦截下一个匹配 urlPattern(支持 * 通配)的 HTTP 响应,返回 body/headers/status。 */
 export async function interceptNext(
-  wc: WebContents,
+  view: WebviewHandle,
   urlPattern: string,
   timeout = 30000,
 ): Promise<{ url: string; status: number; headers: Record<string, string>; body: string }> {
-  ensureAttached(wc);
-  await wc.debugger.sendCommand("Network.enable", {});
+  await view.cdp.send("Network.enable", {});
   const re = new RegExp("^" + urlPattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*"));
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      wc.debugger.removeListener("message", onMsg);
-      reject(new Error(`拦截超时(${timeout}ms): ${urlPattern}`));
-    }, timeout);
-    const onMsg = (
-      _e: unknown,
-      method: string,
-      params: { requestId?: string; response?: { url: string; status: number; headers: Record<string, string> } },
-    ): void => {
-      if (method !== "Network.responseReceived" || !params.response || !re.test(params.response.url)) return;
-      const { requestId, response } = params as { requestId: string; response: NonNullable<typeof params.response> };
-      wc.debugger.removeListener("message", onMsg);
+    const sub = view.cdp.on("Network.responseReceived", (params) => {
+      const p = params as { requestId?: string; response?: { url: string; status: number; headers: Record<string, string> } };
+      if (!p.response || !re.test(p.response.url)) return;
+      const { requestId, response } = p as { requestId: string; response: NonNullable<typeof p.response> };
+      sub.dispose();
       clearTimeout(timer);
-      void wc.debugger
-        .sendCommand("Network.getResponseBody", { requestId })
+      void view.cdp
+        .send("Network.getResponseBody", { requestId })
         .then((b) => {
           const body = b as { body: string; base64Encoded: boolean };
-          resolve({
-            url: response.url,
-            status: response.status,
-            headers: response.headers,
-            body: body.base64Encoded ? Buffer.from(body.body, "base64").toString("utf8") : body.body,
-          });
+          resolve({ url: response.url, status: response.status, headers: response.headers, body: body.base64Encoded ? Buffer.from(body.body, "base64").toString("utf8") : body.body });
         })
         .catch(reject);
-    };
-    wc.debugger.on("message", onMsg);
+    });
+    const timer = setTimeout(() => {
+      sub.dispose();
+      reject(new Error(`拦截超时(${timeout}ms): ${urlPattern}`));
+    }, timeout);
   });
 }

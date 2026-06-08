@@ -10,7 +10,7 @@
 - **样式 = 本项目,布局 = 抄 openclaw**:子系统内部的 chrome 用 `@boundary-desktop/ui` 的 token + `bd-*`,布局与交互照抄 openclaw。
 - **automation 脚本随模块打包**:DSL 脚本(`.json`)内置在 `modules/browser` 里,模块自己加载执行,不单独指定路径。
 - **状态归属**:遵循收窄后的不变量(见 README)——共享/框架状态在 host;模块持有自己的私有功能子系统,deactivate 时彻底销毁(热拔不留痕)。
-- **Electron 已升到 38**(openclaw 基线;`apps/shell` 现为 electron 38.8.6,dev/build 已验)。
+- **Electron 已升到 38**(openclaw 基线;`apps/shell` 现为 electron 42.3.0,dev/build 已验)。
 
 ## 2. 架构
 
@@ -129,9 +129,9 @@ detach 不让模块开窗(会撞"host 持窗口""框架只给一块区域"),而�
 - **app:// 服务 main 模块资产(框架补)**:`app://modules/<id>/...` 的资产目录现只由 `RendererLoader.load()` 注册(`moduleArtifacts.register`,仅 renderer 模块)。main 模块的 chrome 页要能 `app://` 载入,需把注册**上移到对所有 runtime 通用的加载路径**(main 模块也注册其资产目录)。
 - **chrome 页自带 import map**:chrome 页是独立 document,需在其 HTML 里带 `react`/`react-dom/client` → `app://vendor/vendor.mjs` 的 import map —— shell 的 `index.html` 那张不覆盖它。
 
-## 6. Electron 38(已完成)
+## 6. Electron 42(已完成)
 
-`apps/shell` 已从 `^33.2.1` 升到 `^38.0.0`(实装 38.8.6),`electron-vite`/`electron-builder` 不变即兼容,typecheck/build/dev 均通过。openclaw 自动化用到的 API(WebContentsView、`webContents.debugger` CDP、ICU/`TextDecoder` gb18030)在 38 齐备。
+`apps/shell` 与 `modules/browser` 已从 `^33.2.1`/`^38.0.0` 统一升到 `^42.3.0`(实装 42.3.3),`electron-vite 2`/`electron-builder` 不变即兼容,typecheck/build 均通过。openclaw 自动化用到的 API(WebContentsView、`webContents.debugger` CDP、ICU/`TextDecoder` gb18030)在 38 即齐备。注意 42 起 `app://` 自定义 scheme 必须声明 `corsEnabled`,否则跨源 import 模块被 Chromium 拦截(见 CLAUDE.md「壳层运行时结构事实」)。
 
 ## 7. 架构覆盖范围(全部纳入,无后续架构变更)
 

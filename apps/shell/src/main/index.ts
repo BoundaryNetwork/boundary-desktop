@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain, session } from "electron";
-import { HostServices, Registry, startMcpFacade, startWsFacade } from "@boundary-desktop/host";
+import {
+  HostServices,
+  Registry,
+  startMcpFacade,
+  startWsFacade,
+} from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
@@ -18,20 +23,24 @@ import { RendererLoader } from "./renderer-loader.js";
 import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
 import { DiskStorageBackend } from "./storage.js";
+import { ElectronWebviewDriver } from "./webview-driver.js";
 
 // 应用 locale 锁 zh-CN(面向中文场景):navigator.language 与首选语言一致,避免系统 locale
 // 漏出诡异组合成为反爬特征。注:navigator.languages 数组尾项仍来自系统,完全接管需后续 CDP 方案。
 app.commandLine.appendSwitch("lang", "zh-CN");
 registerAppScheme(); // 必须在 app ready 前
 
+const bridge = new RendererBridge();
+const surfaces = new SurfaceManager();
 const authDriver = new ShellAuthDriver();
 // 落盘 storage:模块 ctx.storage 跨重启留存(默认内存后端进程退出即丢)。
 const host = new HostServices({
   auth: authDriver,
-  storage: new DiskStorageBackend(join(app.getPath("userData"), "boundary-storage.json")),
+  storage: new DiskStorageBackend(
+    join(app.getPath("userData"), "boundary-storage.json"),
+  ),
+  webview: new ElectronWebviewDriver(surfaces),
 });
-const bridge = new RendererBridge();
-const surfaces = new SurfaceManager();
 
 // 按 active env(local/staging/prod)构造模块来源:local 扫本地、远程拉对应 catalog
 const { env: activeEnv, source } = createModuleSource();
@@ -40,7 +49,10 @@ console.log(`[shell] 环境:${activeEnv}`);
 // 共享依赖(react/react-dom)产物目录,经 app://vendor 提供给渲染页 import map。
 // 相对 import.meta.dirname(out/main)解析:dev → apps/shell/vendor,打包 → app(.asar)/vendor;
 // 不能用 process.cwd()——打包后 cwd 非 app 目录。
-setVendorDir(process.env.BOUNDARY_VENDOR_DIR ?? join(import.meta.dirname, "..", "..", "vendor"));
+setVendorDir(
+  process.env.BOUNDARY_VENDOR_DIR ??
+    join(import.meta.dirname, "..", "..", "vendor"),
+);
 
 const registry = new Registry({
   source,
@@ -123,7 +135,13 @@ function registerIpc(): void {
   // 壳 → main:模块导航与激活
   ipcMain.handle(IPC.modulesList, async (): Promise<ModuleEntry[]> => {
     const catalog = await source.catalog();
-    return catalog.modules.map((m) => ({ id: m.id, version: m.version, runtime: m.runtime, ui: m.ui, autostart: m.autostart }));
+    return catalog.modules.map((m) => ({
+      id: m.id,
+      version: m.version,
+      runtime: m.runtime,
+      ui: m.ui,
+      autostart: m.autostart,
+    }));
   });
   // 按 id 串行化 activate/deactivate:check-then-act 跨 await 不原子(StrictMode 双调
   // effect、快速点击会并发),串行 + 意图幂等才不会撞 Registry 的"已安装"等不变量。
@@ -141,8 +159,12 @@ function registerIpc(): void {
   );
 
   // 壳 → main:前台模块 / 主题上报,驱动 main 模块的 surface 显隐与主题
-  ipcMain.handle(IPC.surfaceForeground, (_e, id: string | null) => surfaces.setForeground(id));
-  ipcMain.handle(IPC.surfaceTheme, (_e, theme: "light" | "dark") => surfaces.setTheme(theme));
+  ipcMain.handle(IPC.surfaceForeground, (_e, id: string | null) =>
+    surfaces.setForeground(id),
+  );
+  ipcMain.handle(IPC.surfaceTheme, (_e, theme: "light" | "dark") =>
+    surfaces.setTheme(theme),
+  );
   ipcMain.handle(IPC.surfaceMerge, (_e, id: string) => surfaces.merge(id));
 
   // 壳 → main:无边框窗口自绘红绿灯的窗口控制(按事件来源 webContents 定位窗口)。
@@ -159,13 +181,25 @@ function registerIpc(): void {
     if (w) w.setFullScreen(!w.isFullScreen());
   });
   ipcMain.handle(IPC.windowIsFocused, (e) => winOf(e)?.isFocused() ?? false);
-  ipcMain.handle(IPC.windowIsFullscreen, (e) => winOf(e)?.isFullScreen() ?? false);
+  ipcMain.handle(
+    IPC.windowIsFullscreen,
+    (e) => winOf(e)?.isFullScreen() ?? false,
+  );
 
   // renderer runtime → main:ctx 能力,统一按 aid 取该模块的 main 侧 ctx 执行
   ipcMain.handle(IPC.ctxGetShared, () => shared());
   ipcMain.handle(
     IPC.ctxRegisterTool,
-    (_e, { aid, def }: { aid: number; def: { name: string; schema: object; description?: string } }) => {
+    (
+      _e,
+      {
+        aid,
+        def,
+      }: {
+        aid: number;
+        def: { name: string; schema: object; description?: string };
+      },
+    ) => {
       // handler 路由回 renderer 执行;返回的 Disposable 由 main ctx 自动 track,deactivate 时回收
       requireCtx(aid).registerTool({
         name: def.name,
@@ -178,8 +212,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ctxInvokeTool, (_e, { aid, name, args }) =>
     requireCtx(aid).invokeTool(name, args),
   );
-  ipcMain.handle(IPC.ctxNotify, (_e, { aid, opts }) => requireCtx(aid).notify(opts));
-  ipcMain.handle(IPC.ctxApiRequest, (_e, { aid, opts }) => requireCtx(aid).api.request(opts));
+  ipcMain.handle(IPC.ctxNotify, (_e, { aid, opts }) =>
+    requireCtx(aid).notify(opts),
+  );
+  ipcMain.handle(IPC.ctxApiRequest, (_e, { aid, opts }) =>
+    requireCtx(aid).api.request(opts),
+  );
   ipcMain.handle(IPC.ctxStorage, (_e, { aid, op, key, value }) => {
     const s = requireCtx(aid).storage;
     if (op === "get") return s.get(key);
@@ -187,8 +225,12 @@ function registerIpc(): void {
     if (op === "delete") return s.delete(key);
     return s.keys();
   });
-  ipcMain.handle(IPC.ctxRequestLogin, (_e, { aid }) => requireCtx(aid).auth.requestLogin());
-  ipcMain.handle(IPC.ctxRequestLogout, (_e, { aid }) => requireCtx(aid).auth.requestLogout());
+  ipcMain.handle(IPC.ctxRequestLogin, (_e, { aid }) =>
+    requireCtx(aid).auth.requestLogin(),
+  );
+  ipcMain.handle(IPC.ctxRequestLogout, (_e, { aid }) =>
+    requireCtx(aid).auth.requestLogout(),
+  );
 }
 
 function createWindow(): void {
@@ -222,8 +264,12 @@ function createWindow(): void {
   // 窗口本身仍活跃,故用窗口级 focus/blur 事件而非渲染端 window.onblur。
   win.on("focus", () => win.webContents.send(IPC.windowFocusChange, true));
   win.on("blur", () => win.webContents.send(IPC.windowFocusChange, false));
-  win.on("enter-full-screen", () => win.webContents.send(IPC.windowFullscreenChange, true));
-  win.on("leave-full-screen", () => win.webContents.send(IPC.windowFullscreenChange, false));
+  win.on("enter-full-screen", () =>
+    win.webContents.send(IPC.windowFullscreenChange, true),
+  );
+  win.on("leave-full-screen", () =>
+    win.webContents.send(IPC.windowFullscreenChange, false),
+  );
   win.on("closed", () => subAuth.dispose());
   win.once("ready-to-show", () => win.show());
 
@@ -249,14 +295,21 @@ void app.whenReady().then(async () => {
 
   // 门面访问 token:默认随机生成(每次启动新),BOUNDARY_FACADE_TOKEN 可固定(便于配置客户端)。
   // WS 与 MCP 是同一暴露面,共用同一 token。
-  const facadeToken = process.env.BOUNDARY_FACADE_TOKEN ?? randomBytes(24).toString("hex");
+  const facadeToken =
+    process.env.BOUNDARY_FACADE_TOKEN ?? randomBytes(24).toString("hex");
 
   const wsPort = Number(process.env.BOUNDARY_WS_PORT ?? 0);
-  const ws = await startWsFacade(registry.facade(), { port: wsPort, token: facadeToken });
+  const ws = await startWsFacade(registry.facade(), {
+    port: wsPort,
+    token: facadeToken,
+  });
   console.log(`[shell] WS 门面已起:ws://127.0.0.1:${ws.port}`);
 
   const mcpPort = Number(process.env.BOUNDARY_MCP_PORT ?? 0);
-  const mcp = await startMcpFacade(registry.facade(), { port: mcpPort, token: facadeToken });
+  const mcp = await startMcpFacade(registry.facade(), {
+    port: mcpPort,
+    token: facadeToken,
+  });
   console.log(`[shell] MCP 门面已起:http://127.0.0.1:${mcp.port}/mcp`);
   console.log(`[shell] 门面访问 token:${facadeToken}`);
 

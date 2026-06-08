@@ -2,8 +2,13 @@
   "id": "chat",
   "version": "0.1.0",
   "runtime": "renderer",
-  "hostApiVersion": "^0.2.0",
+  "hostApiVersion": "^0.3.0",
   "entry": "dist/index.mjs",
   "integrity": "",
-  "ui": { "displayName": "对话", "icon": "chat", "description": "与数字员工对话", "order": 1 }
+  "ui": {
+    "displayName": "对话",
+    "icon": "chat",
+    "description": "与数字员工对话",
+    "order": 1
+  }
 }
