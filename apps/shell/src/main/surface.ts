@@ -210,6 +210,12 @@ export class SurfaceManager implements SurfaceProvider {
     void this.#surfaces.get(id)?.merge();
   }
 
+  /** driver 专用:把 kernel 造的 view 绑到某 surface(经其 attach 机制,detach/merge 自动 re-parent)。
+   *  surface 为契约 ModuleSurface 实例(本进程内即 ManagedSurface);返回摘除句柄。 */
+  bindView(surface: ModuleSurface, view: object): Disposable {
+    return (surface as ManagedSurface).attach(view);
+  }
+
   /** 单个 surface 按当前主窗布局 + 前台规则发布区域(merge 回主窗后也调)。 */
   publish(surface: ManagedSurface): void {
     if (!this.#win) return;
