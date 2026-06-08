@@ -292,7 +292,39 @@ export interface WebviewProfile {
   name: string;
 }
 
-export type WebviewEvent = "did-navigate" | "title-updated" | "loading" | "favicon-updated";
+/** did-navigate / did-navigate-in-page 事件 payload:导航后的页面态(消费方据此更新地址栏/前进后退态)。 */
+export interface WebviewNavigation {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+/** context-menu 事件 payload:kernel 原样转发 Chromium 右键参数,消费方自建并弹原生菜单。
+ *  通用结构(坐标 + 编辑可用性 + 命中的链接/选区),不含任何浏览器业务语义。 */
+export interface WebviewContextMenu {
+  x: number;
+  y: number;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  editFlags: { canCopy: boolean; canPaste: boolean; canCut: boolean; canSelectAll: boolean };
+  linkURL: string;
+  srcURL: string;
+  selectionText: string;
+}
+
+/** WebviewHandle.on 的事件→payload 映射(定型,消费方按事件名收窄)。 */
+export interface WebviewEventMap {
+  "did-navigate": WebviewNavigation;
+  "did-navigate-in-page": WebviewNavigation;
+  "title-updated": { title: string };
+  "favicon-updated": { favicon: string };
+  "did-finish-load": void;
+  "loading": { loading: boolean };
+  "context-menu": WebviewContextMenu;
+}
+
+export type WebviewEvent = keyof WebviewEventMap;
 
 /** 页面节点的不透明引用(driver 内部映射到 CDP backendNodeId 等);消费方只原样传回。 */
 export interface ElementRef {
@@ -322,7 +354,11 @@ export interface WebviewHandle extends Disposable {
   setVisible(visible: boolean): void;
   /** false=锁定:框架在 native 层盖透明 backdrop 拦人鼠标键盘;程序通道(下列)不受影响。 */
   setInteractive(on: boolean): void;
-  on(event: WebviewEvent, listener: (payload: unknown) => void): Disposable;
+  /** 导航控制(chrome 工具栏 / DSL reload 用);fire-and-forget,完成与否经 did-navigate / did-finish-load 事件观察。 */
+  goBack(): void;
+  goForward(): void;
+  reload(): void;
+  on<E extends WebviewEvent>(event: E, listener: (payload: WebviewEventMap[E]) => void): Disposable;
 
   // --- 单步原语(下沉的 AutomationEngine)-------------------------------------
   find(selector: string): Promise<ElementRef | null>;
