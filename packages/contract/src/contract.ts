@@ -258,9 +258,10 @@ export interface ModuleSurface {
   readonly theme: ReadableState<"light" | "dark">;
   /** 当前是否已分离为独立窗口。 */
   readonly detached: ReadableState<boolean>;
-  /** 把模块创建的 native view 挂到本区域;返回句柄,deactivate 自动摘除。
-   *  view 为不透明句柄(契约不耦合 Electron 类型);main 模块在主进程自行创建。
-   *  detach/merge 时框架把已 attach 的 view 整体 re-parent,模块无感。 */
+  /** 把模块**自有的上层应用 UI**(消费方自己的壳:浏览器 toolbar、chat 侧栏框等,各模块形态不同)
+   *  挂到本区域;返回句柄,deactivate 自动摘除。这层壳归模块,kernel 不感知。
+   *  被浏览/驱动的**内容网页 view** 应经 `ctx.webview.create({ surface })` 由 kernel 持有,不走此入口。
+   *  view 为不透明句柄(契约不耦合 Electron 类型);detach/merge 时框架把已 attach 的 view 整体 re-parent。 */
   attach(view: object): Disposable;
   /** 请求把本 surface 分离到独立窗口(由框架建窗、re-parent;窗口仍归框架)。 */
   detach(): Promise<void>;
