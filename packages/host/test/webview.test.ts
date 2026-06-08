@@ -8,6 +8,7 @@ import {
   type StorageBackend,
   type WebviewDriver,
 } from "../src/index.js";
+import { wrapDriverView } from "../src/index.js";
 
 /** 测试用最小内存 backend(共享、不命名空间)。 */
 function memBackend(): StorageBackend {
@@ -78,6 +79,9 @@ function fakeDriver(): {
         setBounds() {},
         setVisible() {},
         setInteractive() {},
+        goBack() {},
+        goForward() {},
+        reload() {},
         on: () => noop,
         async find() {
           return null;
@@ -152,6 +156,9 @@ describe("HostServices.webview", () => {
           setBounds() {},
           setVisible() {},
           setInteractive() {},
+          goBack() {},
+          goForward() {},
+          reload() {},
           on: () => sub("unsub:on"),
           async find() {
             return null;
@@ -180,5 +187,37 @@ describe("HostServices.webview", () => {
     handle.cdp.on("Page.frameNavigated", () => {});
     dispose(); // 模拟 deactivate
     expect(order).toEqual(["unsub:on", "unsub:cdp", "destroy"]);
+  });
+});
+
+describe("wrapDriverView 导航控制委托", () => {
+  test("goBack/goForward/reload 透传到 driver view", () => {
+    const calls: string[] = [];
+    const noop: Disposable = { dispose: () => {} };
+    const view = {
+      navigate: async () => {},
+      setBounds() {},
+      setVisible() {},
+      setInteractive() {},
+      goBack() { calls.push("back"); },
+      goForward() { calls.push("forward"); },
+      reload() { calls.push("reload"); },
+      on: () => noop,
+      find: async () => null,
+      click: async () => {},
+      type: async () => {},
+      upload: async () => {},
+      scroll: async () => {},
+      screenshot: async () => new Uint8Array(),
+      async eval<T>() { return undefined as T; },
+      cdp: { send: async () => null, on: () => noop },
+      destroy() {},
+    };
+    const track = <D extends Disposable>(d: D): D => d;
+    const handle = wrapDriverView(view, track);
+    handle.goBack();
+    handle.goForward();
+    handle.reload();
+    expect(calls).toEqual(["back", "forward", "reload"]);
   });
 });

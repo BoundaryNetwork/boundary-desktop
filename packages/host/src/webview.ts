@@ -6,6 +6,7 @@ import type {
   ScreenshotOptions,
   ScrollOptions,
   WebviewEvent,
+  WebviewEventMap,
   WebviewHandle,
   WebviewProfile,
 } from "@boundary-desktop/contract";
@@ -23,7 +24,10 @@ export interface DriverWebview {
   setBounds(rect: Rect): void;
   setVisible(visible: boolean): void;
   setInteractive(on: boolean): void;
-  on(event: WebviewEvent, listener: (payload: unknown) => void): Disposable;
+  goBack(): void;
+  goForward(): void;
+  reload(): void;
+  on<E extends WebviewEvent>(event: E, listener: (payload: WebviewEventMap[E]) => void): Disposable;
   find(selector: string): Promise<ElementRef | null>;
   click(target: ElementRef | string): Promise<void>;
   type(target: ElementRef | string, text: string): Promise<void>;
@@ -71,7 +75,11 @@ export function wrapDriverView(view: DriverWebview, track: TrackDisposable): Web
     setBounds: (rect) => view.setBounds(rect),
     setVisible: (v) => view.setVisible(v),
     setInteractive: (on) => view.setInteractive(on),
-    on: (event, listener) => trackSub(view.on(event, listener)),
+    goBack: () => view.goBack(),
+    goForward: () => view.goForward(),
+    reload: () => view.reload(),
+    on: <E extends WebviewEvent>(event: E, listener: (payload: WebviewEventMap[E]) => void) =>
+      trackSub(view.on(event, listener)),
     find: (selector) => view.find(selector),
     click: (target) => view.click(target),
     type: (target, text) => view.type(target, text),
