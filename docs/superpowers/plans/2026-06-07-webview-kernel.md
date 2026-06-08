@@ -624,7 +624,8 @@ git commit -m "chore(contract): HOST_API_VERSION 0.3.0 + 模块 manifest 同步 
 
 - `pnpm -F @boundary-desktop/host test` 全绿,含 ProfileRegistry(默认账号/递增 id/持久化恢复/分区解析)与 ctx.webview(共享 profiles / create 走分区 / deactivate 销毁 / 无 driver 抛错)。
 - `pnpm -r typecheck` 全绿。
-- 契约暴露 `BaseContext.webview`,host 产出能力 + 共享 profile 注册表 + `WebviewDriver` seam 就位,等待 shell 注入真实现。**此时无任何 Electron 代码,纯 headless 可测。**
+- 契约暴露 `BaseContext.webview`,host 产出能力 + 共享 profile 注册表 + `WebviewDriver` seam 就位,等待 shell 注入真实现。host 侧无任何 Electron 代码,纯 headless 可测。
+- **实施中发现的计划修正**:`webview` 是 `BaseContext` 必填字段 ⇒ `RendererContext` 也必填,而 renderer 模块 ctx 在 `apps/shell/src/renderer/runtime.ts` 的 `#buildCtx` 构造 —— 故 Phase 1 必须在此补一个 **`RENDERER_WEBVIEW_STUB`**(create/profiles 全部 `Promise.reject("renderer webview IPC 尚未实现")`,诚实抛错不静默),否则 `pnpm -r typecheck` 中 shell 段不过。这是 Phase 1 唯一的 shell 触碰;真实现见 Phase 2 第 2 点。另:`@boundary-desktop/ui` 版本对齐 `HOST_API_VERSION`,一并 bump 到 0.3.0。
 
 ---
 
@@ -635,7 +636,7 @@ git commit -m "chore(contract): HOST_API_VERSION 0.3.0 + 模块 manifest 同步 
 CLAUDE.md 明确:壳层跨进程 / native view 行为只能 `pnpm dev` 人工验证,故 Phase 2 任务以「实现 + 手动验证清单」为主,非 vitest TDD。要点:
 
 1. **Electron `WebviewDriver` 实现**(`apps/shell/src/main/webview-driver.ts`):用 `WebContentsView` 实现 `DriverWebview`——`navigate`/`setBounds`/`setVisible`;`setInteractive(false)` 盖透明拦截 `WebContentsView` 做 backdrop;`session.fromPartition(partition)` 接分区(复用既有 `registerAppProtocolForSession`);CDP 经 `webContents.debugger`;单步原语 find/click/type/upload/scroll/screenshot/eval 平移 openclaw AutomationEngine。注入:`new Registry({ ..., })` 装配处把 driver 传进 `HostServices({ webview })`。
-2. **renderer bounce**:`apps/shell/src/shared` 加 `ctxWebview*` IPC 通道常量;`preload/index.ts` 的 `moduleBridge` 加 `webviewCreate/Navigate/SetBounds/.../Cdp` 经 `aid` 绑定;`renderer/runtime.ts` 给 renderer 模块的 ctx 组一个走 bridge 的 `webview` 代理(handle 方法 → IPC)。main 模块直调,不过 bridge。
+2. **renderer bounce(替换 Phase 1 的 `RENDERER_WEBVIEW_STUB`)**:`apps/shell/src/shared` 加 `ctxWebview*` IPC 通道常量;`preload/index.ts` 的 `moduleBridge` 加 `webviewCreate/Navigate/SetBounds/.../Cdp` 经 `aid` 绑定;`renderer/runtime.ts` 把现有的 `RENDERER_WEBVIEW_STUB` 换成走 bridge 的真 `webview` 代理(handle 方法 → IPC)。main 模块直调,不过 bridge。
 3. **surface 绑定 + detach re-parent**:`create({surface})` 时 driver 把 view 挂到该 surface 的窗口;surface detach/merge 时框架 re-parent 绑定的 view(复用 `surface.bounds` 订阅重排)。废弃 `ModuleSurface.attach`(改契约 + 删 shell 实现)。
 4. **前台态自动 gate**:框架按 activation 是否前台,叠加 `setVisible` 算 view 最终可见性(§6)。
 5. **profile 持久化 backend**:确认 shell 注入的 `StorageBackend` 是磁盘持久(profiles 跨重启留存);分区数据本就持久。
