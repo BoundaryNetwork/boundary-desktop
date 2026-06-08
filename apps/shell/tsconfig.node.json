@@ -4,7 +4,13 @@
     "composite": true,
     "resolveJsonModule": true,
     "types": ["node"],
-    "tsBuildInfoFile": "./out-tsc/node.tsbuildinfo"
+    "tsBuildInfoFile": "./out-tsc/node.tsbuildinfo",
   },
-  "include": ["src/main", "src/preload", "src/shared", "electron.vite.config.ts", "../../module-envs.json"]
+  "include": [
+    "src/main",
+    "src/preload",
+    "src/shared",
+    "electron.vite.config.ts",
+    "../../module-envs.json",
+  ],
 }
