@@ -131,7 +131,7 @@ detach 不让模块开窗(会撞"host 持窗口""框架只给一块区域"),而�
 
 ## 6. Electron 42(已完成)
 
-`apps/shell` 已从 `^33.2.1` 升到 `^42.0.0`(实装 42.3.0),`electron-vite`/`electron-builder` 不变即兼容,typecheck/build/dev 均通过。openclaw 自动化用到的 API(WebContentsView、`webContents.debugger` CDP、ICU/`TextDecoder` gb18030)在 38 即齐备。
+`apps/shell` 与 `modules/browser` 已从 `^33.2.1`/`^38.0.0` 统一升到 `^42.3.0`(实装 42.3.3),`electron-vite 2`/`electron-builder` 不变即兼容,typecheck/build 均通过。openclaw 自动化用到的 API(WebContentsView、`webContents.debugger` CDP、ICU/`TextDecoder` gb18030)在 38 即齐备。注意 42 起 `app://` 自定义 scheme 必须声明 `corsEnabled`,否则跨源 import 模块被 Chromium 拦截(见 CLAUDE.md「壳层运行时结构事实」)。
 
 ## 7. 架构覆盖范围(全部纳入,无后续架构变更)
 

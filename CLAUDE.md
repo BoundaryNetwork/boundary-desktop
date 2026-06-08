@@ -13,7 +13,8 @@ boundary-desktop 项目级协作规则。**workspace 级通用规则**(git/PR/wo
 ## 技术栈
 
 - pnpm 11.4.0 workspace;Node 22;TypeScript 6,NodeNext ESM(全仓 `"type": "module"`)
-- 测试 vitest 4;壳层 Electron 38 + electron-vite 2 + Vite 5 + React 18 + esbuild
+- 测试 vitest 4;壳层 Electron 42 + electron-vite 2 + Vite 5 + React 18 + esbuild
+  - vitest 4 要求 Vite ^6,而壳层锁 Vite 5(electron-vite 2 仅支持 Vite 5):故 `packages/host` 单独带 vite ^6 devDep 供其 vitest 解析,与壳层 Vite 5 按包隔离,互不影响
 - 包管理只用 pnpm,不用 npm/yarn
 
 ## 命令
@@ -99,7 +100,7 @@ README「核心约束」是底线,改动前回读。要点:
 这些是当前实现的硬事实,不是设计偏好:
 
 - **Registry 在主进程**。renderer 类模块的真身实例活在 renderer;`RendererLoader` 在 main 返回一个**代理 Module**,其 activate/deactivate 经 IPC 驱动 renderer。`aid`(activation id)把 main 侧 ctx 绑到 bridge,供 renderer 回调
-- **`app://` 自定义协议**(standard+secure+supportFetchAPI+stream)加载模块产物与 vendor。响应必须带 `Access-Control-Allow-Origin: *` + JS MIME,否则跨源动态 import 失败
+- **`app://` 自定义协议**(standard+secure+supportFetchAPI+stream+**corsEnabled**)加载模块产物与 vendor。响应必须带 `Access-Control-Allow-Origin: *` + JS MIME;且 scheme 特权必须含 `corsEnabled`——Electron 42(新 Chromium)起,非内置 scheme 不声明 corsEnabled 会在 handler 调用前就被「Cross origin requests are only supported for ...」拦掉(dev 渲染源是 http://localhost,import('app://...') 属跨源)。Electron 38 旧 Chromium 仅靠响应头即可,42 起两者都要
 - **React 单实例共享**:`vendor.mjs` 把 react + react-dom 打进一个 bundle;`index.html` 的 import map 把 `react` 与 `react-dom/client` 两个 specifier 都指向它。模块构建时 external 掉 react,**绝不能**让模块自带 react 副本(会「Dynamic require」崩)
 - **多环境**:`BUILD_ENV` 烘焙默认 env、`BOUNDARY_ENV` 运行时覆盖,值 local/staging/prod。local 走 `LocalDirSource(modules/)`,staging/prod 走 `RemoteSource`,缓存按 env 分目录
 - **导航**:入口来自 catalog,按 `ui.order` 升序;图标按 `ui.icon` 字符串映射到 lucide(`renderer/components/nav-icons.tsx`)
