@@ -46,9 +46,11 @@ function bezier(p0: P, p1: P, p2: P, p3: P, t: number): P {
     y: m * m * m * p0.y + 3 * m * m * t * p1.y + 3 * m * t * t * p2.y + t * t * t * p3.y,
   };
 }
-let cursor: P = { x: 100, y: 100 };
+// 每个 view 一份光标位置:多标签并发驱动各自独立、不互污;随 handle 被 GC 自动回收。
+const cursors = new WeakMap<WebviewHandle, P>();
 
 export async function moveTo(view: WebviewHandle, x: number, y: number): Promise<void> {
+  const cursor = cursors.get(view) ?? { x: 100, y: 100 };
   const dx = x - cursor.x;
   const dy = y - cursor.y;
   const dist = Math.hypot(dx, dy);
@@ -75,7 +77,7 @@ export async function moveTo(view: WebviewHandle, x: number, y: number): Promise
       await sleep(rand(8, 16));
     }
   }
-  cursor = { x, y };
+  cursors.set(view, { x, y });
 }
 
 export async function click(view: WebviewHandle, x: number, y: number): Promise<void> {

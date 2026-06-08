@@ -107,7 +107,8 @@ export function attachCapture(view: WebviewHandle, collector: SessionCollector):
       .catch(() => {});
   });
   return () => {
+    // 只退订,不 Network.disable:同 view 的 cdp 是共享会话(interceptNext 等也可能正用 Network 域),
+    // 单方 disable 会掐掉并发消费方。Network 域随 view.destroy() 的 debugger.detach() 整体回收。
     sub.dispose();
-    void view.cdp.send("Network.disable").catch(() => {}); // view 已销毁则 cdp 调用 reject,吞掉
   };
 }

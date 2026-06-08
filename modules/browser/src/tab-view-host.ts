@@ -1,4 +1,4 @@
-import { Menu, type MenuItemConstructorOptions, app } from "electron";
+import { Menu, type MenuItemConstructorOptions } from "electron";
 import type { Disposable, Rect, WebviewContextMenu, WebviewCreateOptions, WebviewHandle } from "@boundary-desktop/contract";
 import type { TabMeta } from "./ipc.js";
 
@@ -74,10 +74,6 @@ export class TabViewHost {
       { label: "粘贴", role: "paste", enabled: p.editFlags.canPaste },
       { label: "全选", role: "selectAll" },
     ];
-    if (!app.isPackaged) {
-      // dev:检查元素经 cdp 触发(Inspector.inspect 不便;用 DevTools open 命令兜底)。
-      items.push({ type: "separator" }, { label: "检查元素", click: () => void handle.cdp.send("Inspector.enable").then(() => handle.cdp.send("DOM.enable")) });
-    }
     Menu.buildFromTemplate(items).popup();
   }
 
