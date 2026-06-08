@@ -277,12 +277,12 @@ class ElectronWebview implements DriverWebview {
     const MIME: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf" };
     const files = paths.map((fp) => ({ name: basename(fp), mimeType: MIME[extname(fp).toLowerCase()] ?? "application/octet-stream", base64: readFileSync(fp).toString("base64") }));
     const sel = selector.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    const r = (await this.#wc.executeJavaScript(`(async function(){
-      var files=${JSON.stringify(files)};var input=document.querySelector('${sel}');if(!input)return {ok:false};
+    const r = await this.eval<{ ok: boolean; error?: string }>(`(async function(){
+      var files=${JSON.stringify(files)};var input=document.querySelector('${sel}');if(!input)return {ok:false,error:'未找到 input'};
       var dt=new DataTransfer();for(var k=0;k<files.length;k++){var f=files[k],bin=atob(f.base64),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);dt.items.add(new File([u],f.name,{type:f.mimeType}));}
       Object.defineProperty(input,'files',{value:dt.files,configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}));return {ok:true};
-    })()`)) as { ok: boolean };
-    if (!r?.ok) throw new Error("文件注入失败");
+    })()`);
+    if (!r?.ok) throw new Error(`文件注入失败: ${r?.error ?? "未知"}`);
   }
 
   async scroll(opts: ScrollOptions): Promise<void> {

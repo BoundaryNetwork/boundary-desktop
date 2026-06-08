@@ -79,8 +79,8 @@ export default defineModule<MainContext>({
         currentProfileName = p.name;
       }
     };
-    const openTab = (url: string, profile?: string): number => {
-      if (profile) void useProfile(profile);
+    const openTab = async (url: string, profile?: string): Promise<number> => {
+      if (profile) await useProfile(profile); // 必须先切到目标账号,新标签才落在其隔离分区
       return store!.open(url);
     };
     const listProfiles = async (): Promise<{ id: string; name: string; current: boolean }[]> =>

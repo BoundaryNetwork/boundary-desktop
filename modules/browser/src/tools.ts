@@ -5,7 +5,7 @@ interface ToolDeps {
   /** 当前活动标签的 view 句柄(无则 null)。 */
   active: () => WebviewHandle | null;
   /** 新建标签并设为活动,返回 id;指定 profile 则在该账号(不存在自动建)隔离会话中打开。 */
-  openTab: (url: string, profile?: string) => number;
+  openTab: (url: string, profile?: string) => Promise<number>;
   /** 列出账号(profile):id / 名 / 是否当前。 */
   listProfiles: () => Promise<{ id: string; name: string; current: boolean }[]>;
   /** 请求把浏览器区域提到前台(agent 驱动导航时浮出给用户看)。 */
@@ -67,7 +67,7 @@ export function browserTools(deps: ToolDeps): ToolDefinition[] {
       description: "新建标签页(可选初始 URL),返回 tabId。指定 profile 则在该账号隔离会话中打开(不存在自动建)",
       schema: { type: "object", properties: { url: { type: "string" }, profile: { type: "string" } } },
       handler: async (a) => {
-        const tabId = deps.openTab(str(a, "url") ?? "", str(a, "profile"));
+        const tabId = await deps.openTab(str(a, "url") ?? "", str(a, "profile"));
         deps.foreground(); // 浮出给用户看
         return { tabId };
       },

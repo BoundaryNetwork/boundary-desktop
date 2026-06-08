@@ -11,7 +11,7 @@ interface Deps {
   active: () => WebviewHandle | null;
   runner: Runner;
   /** 新建标签并设为活动,返回 id;指定 profile 则在该账号(不存在自动建)隔离会话中打开。 */
-  openTab: (url: string, profile?: string) => number;
+  openTab: (url: string, profile?: string) => Promise<number>;
   /** 请求把浏览器区域提到前台(跑脚本时浮出给用户看)。 */
   foreground: () => void;
 }
@@ -85,7 +85,7 @@ export function automationTools(deps: Deps): ToolDefinition[] {
         const args = (a ?? {}) as { scriptId?: string; variables?: Record<string, unknown>; profile?: string };
         const script = loadScripts(deps.scriptsDir).scripts.find((s) => s.id === args.scriptId);
         if (!script) throw new Error(`无脚本: ${args.scriptId ?? ""}`);
-        if (args.profile) deps.openTab("", args.profile); // 在指定账号开新标签,脚本即在该会话执行
+        if (args.profile) await deps.openTab("", args.profile); // 在指定账号开新标签,脚本即在该会话执行
         deps.foreground(); // 浮出浏览器,让用户看着脚本执行
         const vars = args.variables ?? {};
         const { record, done } = deps.runner.enqueue(script, vars, (rec) =>
