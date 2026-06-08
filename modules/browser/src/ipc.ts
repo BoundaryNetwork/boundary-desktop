@@ -17,6 +17,7 @@ export const CH = {
   groupRename: "browser-chrome:group-rename", // 双击 chip 重命名;payload {groupId,name}
   dragTab: "browser-chrome:drag-tab", // 拖拽重排/进出分组;payload {tabId,beforeId,groupId}
   profileMenu: "browser-chrome:profile-menu", // 点账号按钮 → main 弹原生菜单(切换/新建账号);payload {x,y}
+  openChat: "browser-chrome:open-chat", // 临时:点工具栏按钮 → main 调 chat.open tool 切到对话模块
   ready: "browser-chrome:ready", // 页面订阅就绪后拉一次全量态(避开首帧广播早于监听注册的竞态)
   // main → chrome 页(标签列表 + 分组 + 活动标签导航态 + 主题)
   state: "browser-chrome:state",
@@ -77,6 +78,8 @@ export interface TabApi {
   dragTab(tabId: number, beforeId: number | null, groupId: number | null): void;
   /** 点账号按钮:请 main 在 (x,y) 弹原生菜单(切换/新建账号)。 */
   showProfileMenu(x: number, y: number): void;
+  /** 临时:点工具栏「对话」按钮,请 main 调 chat.open tool 把对话模块切到前台。 */
+  openChat(): void;
   /** 订阅就绪后拉一次当前全量态。 */
   ready(): void;
   /** 订阅全量态;返回退订函数。 */

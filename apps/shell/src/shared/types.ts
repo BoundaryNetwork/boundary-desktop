@@ -81,7 +81,7 @@ export interface ModuleBridge {
   // main → runtime
   onActivate(handler: (req: ActivateRequest) => Promise<void>): void;
   onDeactivate(handler: (aid: number) => Promise<void>): void;
-  onToolInvoke(handler: (aid: number, name: string, args: unknown) => Promise<unknown>): void;
+  onToolInvoke(handler: (aid: number, name: string, args: unknown, caller: string | null) => Promise<unknown>): void;
   onSharedChanged(listener: (shared: SharedState) => void): void;
   // runtime → main(都带 aid,主进程按 aid 取对应模块的 main 侧 ctx 来执行)
   getShared(): Promise<SharedState>;

@@ -200,12 +200,13 @@ function registerIpc(): void {
         def: { name: string; schema: object; description?: string };
       },
     ) => {
-      // handler 路由回 renderer 执行;返回的 Disposable 由 main ctx 自动 track,deactivate 时回收
+      // handler 路由回 renderer 执行;返回的 Disposable 由 main ctx 自动 track,deactivate 时回收。
+      // inv.caller 由基座在调用点注入,这里随调用一并转发给 renderer,使 renderer handler 也拿到来源。
       requireCtx(aid).registerTool({
         name: def.name,
         schema: def.schema,
         description: def.description,
-        handler: (args) => bridge.invokeRendererTool(aid, def.name, args),
+        handler: (args, inv) => bridge.invokeRendererTool(aid, def.name, args, inv.caller),
       });
     },
   );

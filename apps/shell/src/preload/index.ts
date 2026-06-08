@@ -93,7 +93,7 @@ const moduleBridge: ModuleBridge = {
     answer(IPC.rtDeactivate, (m) => handler(m.aid as number).then(() => undefined)),
   onToolInvoke: (handler) =>
     answer(IPC.rtToolInvoke, (m) =>
-      handler(m.aid as number, m.name as string, m.args),
+      handler(m.aid as number, m.name as string, m.args, (m.caller ?? null) as string | null),
     ),
   onSharedChanged: (listener) => {
     ipcRenderer.on(IPC.sharedChanged, (_e, shared: SharedState) => listener(shared));

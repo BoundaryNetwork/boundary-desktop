@@ -79,6 +79,15 @@ function ChatApp({ ctx }: { ctx: RendererContext }): React.ReactElement {
 
   return (
     <div style={S.root}>
+      {/* 临时:验证跨模块前台切换——调浏览器自己注册的 open tool 把它切到前台。 */}
+      <button
+        type="button"
+        className="bd-chip"
+        style={{ alignSelf: "flex-end" }}
+        onClick={() => void ctx.invokeTool("browser.open", {})}
+      >
+        转到浏览器 →
+      </button>
       <div style={S.hello}>
         <div style={S.avatar}>小</div>
         <h2>你好，我是小达</h2>
@@ -133,6 +142,17 @@ const mod = {
       handler: async (args) => {
         const q = (args as { q?: string })?.q ?? "";
         return { answer: `（示例回复）收到：${q}` };
+      },
+    });
+    // open:把对话模块切到前台。别的模块经 invokeTool("chat.open") 调用即跳到本页。
+    ctx.registerTool({
+      name: "open",
+      schema: { type: "object", properties: {} },
+      description: "把对话模块切到前台",
+      handler: async (_args, inv) => {
+        ctx.navigate("chat");
+        ctx.notify({ level: "info", message: `对话由 ${inv.caller ?? "外部"} 打开` });
+        return { ok: true, caller: inv.caller };
       },
     });
     root = createRoot(ctx.container);
