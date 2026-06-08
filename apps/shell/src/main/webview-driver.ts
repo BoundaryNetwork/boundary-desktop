@@ -229,7 +229,8 @@ class ElectronWebview implements DriverWebview {
 
   async find(selector: string): Promise<ElementRef | null> {
     const c = await this.#findCoords(selector);
-    return c ? { token: JSON.stringify(c) } : null;
+    // token 携带 selector:upload 要按选择器定位 input 注入文件;click/type/scroll 只读坐标,多带 sel 字段无害。
+    return c ? { token: JSON.stringify({ ...c, sel: selector }) } : null;
   }
 
   async #coordsOf(target: ElementRef | string): Promise<Coords> {
