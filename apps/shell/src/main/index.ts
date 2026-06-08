@@ -23,12 +23,15 @@ import { RendererLoader } from "./renderer-loader.js";
 import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
 import { DiskStorageBackend } from "./storage.js";
+import { ElectronWebviewDriver } from "./webview-driver.js";
 
 // 应用 locale 锁 zh-CN(面向中文场景):navigator.language 与首选语言一致,避免系统 locale
 // 漏出诡异组合成为反爬特征。注:navigator.languages 数组尾项仍来自系统,完全接管需后续 CDP 方案。
 app.commandLine.appendSwitch("lang", "zh-CN");
 registerAppScheme(); // 必须在 app ready 前
 
+const bridge = new RendererBridge();
+const surfaces = new SurfaceManager();
 const authDriver = new ShellAuthDriver();
 // 落盘 storage:模块 ctx.storage 跨重启留存(默认内存后端进程退出即丢)。
 const host = new HostServices({
@@ -36,9 +39,8 @@ const host = new HostServices({
   storage: new DiskStorageBackend(
     join(app.getPath("userData"), "boundary-storage.json"),
   ),
+  webview: new ElectronWebviewDriver(surfaces),
 });
-const bridge = new RendererBridge();
-const surfaces = new SurfaceManager();
 
 // 按 active env(local/staging/prod)构造模块来源:local 扫本地、远程拉对应 catalog
 const { env: activeEnv, source } = createModuleSource();
