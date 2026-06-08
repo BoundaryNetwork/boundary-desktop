@@ -180,6 +180,12 @@ export function Toolbar(): JSX.Element {
             }}
           />
         </div>
+        {/* 临时:验证跨模块前台切换——调对话模块自己注册的 open tool 把它切到前台。 */}
+        <button className="nav-btn" type="button" title="转到对话" aria-label="转到对话" onClick={() => window.tabAPI.openChat()}>
+          <svg viewBox="0 0 24 24" width="18" height="18" {...S}>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
         <button
           id="btn-profile"
           type="button"

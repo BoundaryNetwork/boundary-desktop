@@ -97,6 +97,17 @@ export default defineModule<MainContext>({
     for (const def of automationTools({ scriptsDir, active: () => active(), runner, openTab, foreground: () => s.requestForeground() })) {
       ctx.registerTool(def);
     }
+    // open:把浏览器模块切到前台。别的模块经 invokeTool("browser.open") 调用即跳到本页。
+    ctx.registerTool({
+      name: "open",
+      schema: { type: "object", properties: {} },
+      description: "把浏览器模块切到前台",
+      handler: async (_args, inv) => {
+        s.requestForeground();
+        ctx.notify({ level: "info", message: `浏览器由 ${inv.caller ?? "外部"} 打开` });
+        return { ok: true, caller: inv.caller };
+      },
+    });
 
     // 区域/前台/主题变化 → 模块自排版与自显隐(框架只发状态)。
     relayout();
@@ -149,6 +160,10 @@ export default defineModule<MainContext>({
     });
     listen(CH.profileMenu, (e) => {
       if (chrome(e)) void showProfileMenu();
+    });
+    // 临时:点工具栏「对话」按钮 → 调对话模块自己的 open tool 把它切到前台(跨模块经基座路由)。
+    listen(CH.openChat, (e) => {
+      if (chrome(e)) void ctx.invokeTool("chat.open", {});
     });
   },
 
