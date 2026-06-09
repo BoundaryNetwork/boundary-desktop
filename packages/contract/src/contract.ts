@@ -330,6 +330,8 @@ export interface WebviewEventMap {
   "did-finish-load": void;
   "loading": { loading: boolean };
   "context-menu": WebviewContextMenu;
+  /** 页面发起 window.open / target=_blank:kernel 拦下原生新窗口,把目标 URL 转交消费方自行处理(如开新标签)。 */
+  "open-url": { url: string };
 }
 
 export type WebviewEvent = keyof WebviewEventMap;
