@@ -182,6 +182,12 @@ class ElectronWebview implements DriverWebview {
       };
       this.#emit("context-menu", payload);
     });
+    // window.open / target=_blank:拦下 Electron 默认的脱离窗口(且会逃逸到默认 session),
+    // 把目标 URL 交给消费方在同分区开新标签,登录态/ cookie 才不丢。
+    wc.setWindowOpenHandler(({ url }) => {
+      this.#emit("open-url", { url });
+      return { action: "deny" };
+    });
   }
 
   // --- CDP 通道 ---

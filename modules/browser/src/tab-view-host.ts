@@ -9,6 +9,8 @@ interface HostDeps {
   startPage: string;
   /** 某标签导航态变化(喂回 TabStore)。 */
   onNav: (id: number, patch: Partial<Omit<TabMeta, "id">>) => void;
+  /** 页面发起 window.open / target=_blank:在同一账号(openerProfileId)下开新标签。 */
+  onOpenUrl: (openerProfileId: string, url: string) => void;
 }
 
 /** 每标签一个 kernel view(WebviewHandle)。view 由 kernel 持有/绑 surface;导航事件、右键菜单经 handle.on。 */
@@ -59,6 +61,8 @@ export class TabViewHost {
       subs.push(handle.on("title-updated", (p) => this.#deps.onNav(id, { title: p.title })));
       subs.push(handle.on("favicon-updated", (p) => this.#deps.onNav(id, { favicon: p.favicon })));
       subs.push(handle.on("context-menu", (p) => this.#contextMenu(handle, p)));
+      // 页面里点出的新链接:继承本 view 的账号分区开新标签(不取全局当前账号)。
+      subs.push(handle.on("open-url", (p) => this.#deps.onOpenUrl(profileId, p.url)));
       void handle.navigate(url || this.#deps.startPage);
     });
     this.#views.set(id, entry);

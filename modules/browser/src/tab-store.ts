@@ -46,10 +46,11 @@ export class TabStore {
     return this.#activeId;
   }
 
-  open(url: string): number {
+  /** 开新标签。profileId 显式传入(页面发起的新链接继承 opener 账号)则用之,否则用当前账号(命令/手动新建)。 */
+  open(url: string, profileId?: string): number {
     const id = ++this.#seq;
     this.#tabs.push({
-      id, title: "新标签页", url, favicon: "", canGoBack: false, canGoForward: false, profileId: this.#currentProfile,
+      id, title: "新标签页", url, favicon: "", canGoBack: false, canGoForward: false, profileId: profileId ?? this.#currentProfile,
     });
     this.#activeId = id;
     this.#emit();

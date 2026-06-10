@@ -62,6 +62,7 @@ export default defineModule<MainContext>({
       create: (opts) => ctx.webview.create({ ...opts, surface: s }),
       startPage: newtabUrl,
       onNav: (id, patch) => store!.update(id, patch),
+      onOpenUrl: (profileId, url) => store!.open(url, profileId), // 页面新链接:继承 opener 账号分区
     });
     store.open(""); // 初始一个新标签页(用 default 账号)
 
