@@ -1,5 +1,5 @@
-appId: com.boundary.desktop
-productName: Boundary Desktop
+appId: ai.boundary.claw
+productName: DabiAI Desktop
 
 # 图标/签名材料在仓库根 build/(本 app 目录无 build/,显式指过去)
 directories:
@@ -20,6 +20,16 @@ mac:
   icon: ../../build/icon.icns
   entitlements: ../../build/entitlements.mac.plist
   entitlementsInherit: ../../build/entitlements.mac.inherit.plist
+  # 外挂 agentworkerd:把预签名的 worker .app 整体塞进 Contents/Resources/。
+  # 运行期由 worker/paths.ts 定位 resourcesPath/clawhost-agentworkerd.app/Contents/MacOS/<bin>。
+  extraResources:
+    - from: resources/clawhost-agentworkerd.app
+      to: clawhost-agentworkerd.app
+  # 防重签:osx-sign 默认遍历 Contents 用 entitlementsInherit(无 keychain-access-groups、
+  # 不重嵌 profile)强制重签嵌套 .app,会打掉 worker 的 Secure Enclave 访问(-34018)。
+  # signIgnore 命中即完全跳过,保留脚本签好的签名。一条正则覆盖该 .app 及其所有子路径。
+  signIgnore:
+    - "clawhost-agentworkerd\\.app"
   target:
     - target: dmg
       arch:

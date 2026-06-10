@@ -6,3 +6,6 @@ vendor/
 *.tsbuildinfo
 *.log
 .DS_Store
+
+# 外挂 worker 的签名 .app(dev 软链 ai-agent 产物;打包经 extraResources 注入)
+apps/shell/resources/

@@ -24,6 +24,8 @@ import { ShellMainLoader } from "./main-loader.js";
 import { SurfaceManager } from "./surface.js";
 import { DiskStorageBackend } from "./storage.js";
 import { ElectronWebviewDriver } from "./webview-driver.js";
+import { WorkerSupervisor } from "./worker/supervisor.js";
+import { WorkerApiDriver } from "./worker/api-driver.js";
 
 // 应用 locale 锁 zh-CN(面向中文场景):navigator.language 与首选语言一致,避免系统 locale
 // 漏出诡异组合成为反爬特征。注:navigator.languages 数组尾项仍来自系统,完全接管需后续 CDP 方案。
@@ -33,13 +35,23 @@ registerAppScheme(); // 必须在 app ready 前
 const bridge = new RendererBridge();
 const surfaces = new SurfaceManager();
 const authDriver = new ShellAuthDriver();
+// agentworkerd 进程监管器:壳 spawn 并托管 worker 子进程,发现其本地 HTTP/WS 端点。
+const worker = new WorkerSupervisor();
 // 落盘 storage:模块 ctx.storage 跨重启留存(默认内存后端进程退出即丢)。
 const host = new HostServices({
   auth: authDriver,
+  // 数据面:模块 ctx.api.request → 代发到 worker 本地 HTTP(baseURL 实时取自发现到的端点)。
+  api: new WorkerApiDriver(() => worker.httpBaseUrl()),
   storage: new DiskStorageBackend(
     join(app.getPath("userData"), "boundary-storage.json"),
   ),
   webview: new ElectronWebviewDriver(surfaces),
+});
+
+// 发现到 worker 端点后推进 config:模块读 config.agentworkerd.ws 自连实时 turn 流。
+// 走现成 config 通道,无新契约。
+worker.onDiscover((endpoints) => {
+  host.updateConfig({ ...host.getConfig(), agentworkerd: endpoints });
 });
 
 // 按 active env(local/staging/prod)构造模块来源:local 扫本地、远程拉对应 catalog
@@ -291,6 +303,9 @@ void app.whenReady().then(async () => {
     if (ses !== session.defaultSession) registerAppProtocolForSession(ses);
   });
   registerIpc();
+  // 先把 worker 拉起来:其本地 HTTP 在 bootstrap Phase 2 即就绪(早于激活),
+  // 壳随后经 HTTP 驱动登录/激活,所以 spawn-first 是 worker 的原生路径。
+  worker.start();
   createWindow();
 
   // 能力模块开机激活(host 驱动,先于门面),其 tool 在 WS/MCP 一起来即可见。
@@ -323,4 +338,14 @@ void app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// 退出排空:worker 还没排空就被 Electron 拆掉会留下孤儿。先拦住退出,跑完
+// drain → shutdown → 等退出(超时强杀),再真正退出。
+let quitting = false;
+app.on("before-quit", (event) => {
+  if (quitting) return;
+  event.preventDefault();
+  quitting = true;
+  void worker.stop().finally(() => app.quit());
 });
