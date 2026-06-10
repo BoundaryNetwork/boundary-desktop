@@ -116,6 +116,15 @@ export type WebviewEvent = "did-navigate" | "title-updated" | "loading" | "favic
 - **profile 注册表**(有哪些 profile、id→名、当前选谁):从 `modules/browser` 内存 Map + `ctx.storage` 迁到 kernel,用 host 级 storage 持久化。
 - browser 的账号切换 UI、chat 的账号选择,都改调 `ctx.webview.profiles`;`create({ profileId })` 用对应 partition。人在 browser 登录 → AI 在 chat 复用,登录态因共享 partition 互通。
 
+### 3.3 可变共享子资源的 per-module 归属
+
+kernel 持有的可变、可创建、可销毁的共享子资源——`WebviewHandle`(view)与 `Profile`——记录创建方模块 id,销毁 / 回收按归属(创建方模块 id 由 ctx 绑定,kernel 内部据此判定,不进签名):
+
+- **view**:`create` 返回的 handle 绑创建模块的 activation;`dispose` / 回收只作用于本模块创建的 view,模块 deactivate / Failed 时按 id 回收其全部 view(故障收容失败路径,见框架主设计 5.4)。一个模块够不到、也回收不掉另一个模块的 view。
+- **profile**:`profiles.create(name)` 记创建方;`profiles.remove(id)` **仅允许删本模块创建的 profile**——profile 是跨模块共享登录态(人在 browser 登录、AI 在 chat 复用),让一个模块删掉另一个正在用的 profile 会横向打穿。共享读(`list` / 用 `profileId` create view)不受限,受限的只有销毁。
+
+只读共享态(主题 / bounds / 登录态快照)无所谓归属,不在此列;归属只约束"可变、可销毁"的子资源。
+
 ## 4. 工程硬骨头
 
 ### 4.1 bounds 同步(消费方喂矩形)

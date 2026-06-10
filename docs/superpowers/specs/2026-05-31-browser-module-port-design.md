@@ -121,6 +121,13 @@ detach 不让模块开窗(会撞"host 持窗口""框架只给一块区域"),而�
 | `mcp-server.ts`(HTTP JSON-RPC) | 丢弃 | facade 替代 |
 | `browser-ipc-contract` / preload tabAPI | 模块内部自用 | 模块自己的主⇄渲染 IPC,不进框架契约 |
 
+### 5.0 逻辑层可迁移 + 循环预算(故障收容)
+
+browser 是重 main 模块,其编排逻辑(DSL / runner / 采集)与原生资源之间的缝要留好,且自身循环不得冻住主进程:
+
+- **逻辑层只依赖 ctx,不碰进程内共享可变态。** 编排层对原生网页的一切操作只经 `ctx.webview`(WebView Kernel,见 webview-kernel 设计)、profile 只经 `ctx.webview.profiles`、持久只经 `ctx.storage`,**不持有也不引用任何 main 进程内的共享可变全局**。如此逻辑层**可迁移**:将来若把它弹进隔离 tier(独立进程/线程,见框架主设计 8.5),复用 kernel 已为 renderer 消费方铺好的 IPC bounce 路径(webview-kernel §4.4)即可,是一次 Loader 替换,不是重写。
+- **轮询循环带预算。** runner 串行队列、`wait_for` / SPA 成功门一类"反复调原语直到命中"的轮询,一律带 step / 迭代预算 + 协作取消 token:超预算即按失败收尾,绝不无界自旋。这把"同步死循环冻住主进程"在当下进程内就堵掉大半(kernel 单步原语自身的重试也内部有界)。
+
 ### 5.1 框架/构建接线(三处当前未通,本设计要补)
 
 `modules/browser` 是 main-runtime 但自带 renderer chrome 页(载入自己的 WebContentsView),涉及三处:

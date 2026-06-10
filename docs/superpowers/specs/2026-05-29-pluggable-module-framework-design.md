@@ -72,7 +72,7 @@
 
 ### 4.3 基座的四项职责
 
-由"状态唯一持有者"推导：**持有运行环境与加载适配**（Loader）、**持有全局注册表**（tool 等注册物集中登记、带命名空间、生命周期到期回收）、**驱动模块生命周期状态机**（加载/激活/卸载/替换是受控迁移）、**向模块注入能力**（ctx，按 runtime 裁剪）。
+由"状态唯一持有者"推导：**持有运行环境与加载适配**（Loader）、**持有全局注册表**（tool 等注册物集中登记、按 `(provider_id, name)` 二级地址、生命周期到期回收）、**驱动模块生命周期状态机**（加载/激活/卸载/替换是受控迁移）、**向模块注入能力**（ctx，按 runtime 裁剪）。
 
 ## 5. 模块生命周期
 
@@ -84,7 +84,7 @@ Discovered → Resolved → Fetched → Loaded → Active → Inactive → Unloa
    清单       校验通过    验签通过   入内存   副作用   副作用     实例
 ```
 
-四种操作对应受控迁移：加载（→ Loaded，代码就位但不生效，可预热）、激活（→ Active）、卸载（→ Unloaded）、替换（见 5.2）。
+四种操作对应受控迁移：加载（→ Loaded，代码就位但不生效，可预热）、激活（→ Active）、卸载（→ Unloaded）、替换（见 5.2）。任一受控迁移中模块代码抛异常 → 转 `Failed`（隔离态），不沿 happy path 继续；失败态语义与收容见 5.4。
 
 ### 5.2 热替换：先起后落
 
@@ -95,6 +95,20 @@ Discovered → Resolved → Fetched → Loaded → Active → Inactive → Unloa
 **状态外置**让替换干净：模块不持有底层资源，`deactivate` 时没有句柄要清理，换模块如换映射表而非重建管道。
 
 **在途任务 drain**：替换/卸载前，正在执行且属于旧模块的调用，要么等其完成、要么明确失败，不得在 `deactivate` 时丢弃。drain 是**基座私有实现**——Registry 维护每个模块的 in-flight invocation 账本，在 Active → Inactive 这步先等其清零（或超时强失败）再调 `module.deactivate`。它不进契约、不作为模块钩子暴露，模块对 drain 无感。
+
+### 5.4 故障收容
+
+模块不规矩时（钩子抛异常、handler 死循环、未捕获 rejection）不得波及基座与其它模块。收容是基座私有机制，模块无感。
+
+**失败态。** 状态机增 `Failed`：任一受控迁移中模块代码抛异常即转入 Failed，该模块被隔离（其 tool 摘除、订阅退订、UI 入口移除），不影响其余模块；Failed 模块可经热替换或重载尝试恢复。
+
+**转换事务化。** `activate(ctx)` 抛 → 回滚到迁移前的干净态（已注册的副作用按账本全部撤销），不留半激活残留。`deactivate()` 抛到一半 → 基座仍**强制清空**该模块的 Disposable 账本，账本不依赖 `deactivate` 跑完。
+
+**三入口收容。** 基座持有的三个调用入口——`activate` / `deactivate` / tool `handler`——一律包在收容边界里：模块源异常在此被接住、归因到模块、转 Failed 或失败该次调用，不冒泡到基座主循环。
+
+**失败路径回收。** 第 7.3 节的 Disposable 自动回收，触发点不止"`deactivate` 成功"，而是"任意失败 / 强制拆除"：模块崩了、Failed 了、被强卸了，基座都照账本（按模块 id）回收其全部注册副作用，不依赖模块自己优雅退出。
+
+**进程级兜底。** 主进程 `uncaughtException` / `unhandledRejection` 设兜底：记录 + 不退出 + 尽力归因到肇事模块。诚实上限：游离的异步副作用（模块自挂的 `setInterval` 回调、detached promise）栈里未必有模块名，归因不保证完整——这类只能靠收窄模块可触及的全局面（见 8.5 隔离 tier）结构性消除，在进程内做不到彻底。
 
 ## 6. 模块来源与开发期支持
 
@@ -171,7 +185,7 @@ catalog 的 `version` 字段是对账触发器：基座按间隔轮询这一个�
 
 ### 7.3 注册类（贡献 + 自动回收）
 
-模块向系统贡献东西，返回 `Disposable` 句柄；句柄由基座绑定到模块生命周期，`deactivate` 时自动回收，模块通常无需手动注销。代表：`registerTool`、`registerView`/`registerMenuItem`（渲染层 UI 贡献）、`on`（事件订阅）。
+模块向系统贡献东西，返回 `Disposable` 句柄；句柄由基座绑定到模块生命周期，`deactivate` 时自动回收，模块通常无需手动注销。代表：`registerTool`、`registerView`/`registerMenuItem`（渲染层 UI 贡献）、`on`（事件订阅）。回收是**基座驱动、按模块 id 记账**的，触发点不限于 `deactivate` 成功——模块崩溃 / Failed / 强卸时同样照账本回收，不依赖模块优雅退出（见 5.4 失败路径回收）。
 
 ### 7.4 特例：storage（私有持久）
 
@@ -259,41 +273,75 @@ Loader 适配层把"代码在某 runtime 下变成 Module 实例"的脏活收口
 
 这样同时满足统一（同一套 `bd-*`/token）、独立（模块只依赖发布契约、互不依赖）、灵活（自由组合 + 专属内联）、不丢规范（`bd-*` 即规范，版本化兜底）。
 
+### 8.5 隔离 tier（Loader 声明，进程退出即失败信号）
+
+Loader 除"把代码变成 Module 实例"外，再声明该 runtime 的**隔离级别**：`in-process`（模块代码与基座同进程，当前 main / renderer 两个 Loader 均属此）或 `isolated`（模块逻辑跑在独立 OS 进程 / 线程，崩溃不波及基座）。
+
+隔离 tier 与故障收容（5.4）接同一条管线：`isolated` 模块的**进程退出**就是一个失败信号，基座按 5.4 的失败路径回收其账本、转 Failed、决定是否重起——与进程内的 throw / 超时走同一套善后，没有第二套语义。
+
+本版只定义这层声明与接口，**不实现 isolated Loader**；它是将来某个重 main 模块（其同步死循环 / 全局污染在进程内收容不掉时）的一次 Loader 替换，上层契约与模块代码不动。
+
 ## 9. tool 子系统
 
 ### 9.1 tool 注册是横切能力
 
 任何模块（无论 runtime）都可能把功能暴露成可调用 tool。tool 注册是 `ctx.registerTool` 这一横切能力，与"模块跑在哪"正交。全局 tool 注册表唯一，集中在主进程（对外门面与变更通知都从这里出）。
 
-### 9.2 命名空间：冲突结构性消除
+### 9.2 provider 与二级地址：冲突结构性消除
 
-基座在 `registerTool` 时用模块 `id` 自动给 tool 名加前缀，登记为 `<module.id>.<name>`；模块只写裸名，无法触及或伪造前缀。于是：
+tool 注册表是 **provider 中心**的：谁提供 tool，谁就是一个 provider。注册表核心契约：
 
-- **跨模块冲突结构性不可能**——tool 唯一性来自模块 id 唯一性（由清单服务保证），基座无需去重逻辑。
-- **模块内重名**在注册时检测到 `<id>.<name>` 已存在，直接抛错、激活失败、日志点名。
-- **热替换回收**靠前缀匹配：撤销某模块即移除所有 `<module.id>.` 开头的 tool，不漏不误删。
+```
+register_provider(Provider { id, name, description, version })
+register(provider_id, Tool { name, description, input_schema, handler })
+list_providers() -> Vec<ProviderDescriptor>        // 轻量:id / name / description / version,无 schema
+list_tools(provider_id) -> Vec<ToolDescriptor>     // 某 provider 的 tool:裸名 + schema
+call(provider_id, name, arguments) -> Result<ToolResult>   // 异步;可流式 emit 事件
+```
+
+**模块即 provider（1:1）。** 一个模块注册为恰好一个 provider（provider id = 模块 id，name/description/version 取自 manifest）。模块开发者只写 `ctx.registerTool(裸 Tool)`，框架据此自动 `register_provider(self)`（首次）+ `register(self.id, tool)`——模块写裸名，provider_id 由框架绑定，模块触及不到、伪造不了。provider 在注册表层比模块更通用（基座自身的内建 tool 也可作为一个 provider），但模块一律 1:1，回收按模块生命周期（5.4）走。
+
+注册表 key 是 `(provider_id, name)` 二元组，**tool 保留裸名**：
+
+- **跨 provider 冲突结构性不可能**——地址唯一性来自 provider id 唯一性（模块 provider 的 id = 模块 id，由清单服务保证），两个 provider 各有裸名 `click` 落在不同节点下、不冲突，基座无需去重逻辑。
+- **provider 内重名**注册时检测到 `(provider_id, name)` 已存在，直接抛错、激活失败、日志点名。
+- **回收**按 provider_id 删该 provider 全部 tool；模块 provider 在模块 deactivate / Failed 时按此回收（5.4 失败路径），不漏不误删。
+
+扁平化（把二级地址拼成单一字符串）是**门面边界**的事，按门面各自需要派生，不在注册层强加给所有消费方。
 
 ### 9.3 跨进程路由对模块透明
 
-注册时记录 tool 来源（runtime）。被调用时：主进程模块的 handler 本地直接执行；渲染层模块的 handler 由基座经 IPC 转发到渲染进程执行、结果回传。模块写 handler 时当作本地调用，跨进程细节由基座承担。
+provider 注册时记录来源 runtime。`call(provider_id, name, arguments)` 显式带 provider_id，基座按 `provider_id → runtime` 直接路由，不解析字符串。主进程 provider 的 handler 本地直接执行；渲染层 provider 的 handler 由基座经 IPC 转发到渲染进程执行、结果回传。`call` 异步，除最终 `ToolResult` 外可在执行中**流式 emit 事件**（进度 / 局部输出），由门面按 call id 关联转发（见 10.3）。模块写 handler 时当作本地调用，跨进程与流式细节由基座承担。
+
+### 9.4 调用收容
+
+`call` 是外部进入模块代码最高频的运行时入口，单次调用受收容：每次 call 设超时上限，超时按失败返回并归因到 `(provider_id, name)`；handler 抛异常在 9.3 的执行边界（即 5.4 三入口之一）被接住、归因、失败该次 call，不波及注册表与其它在途 call。超时只能截断异步挂起；同步死循环在进程内截不断，归隔离 tier（8.5）兜底。
 
 ## 10. 对外门面
 
-### 10.1 核心契约：三件套
+### 10.1 核心契约：渐进式三方法
 
-注册表对门面只暴露三个动作：**list**（列出当前 tool 及 schema）、**invoke(name, args)**（调用，内部按来源路由）、**version / 变更通知**（tool 集合随模块热更新变化时的对账依据）。任何门面都映射到这三件套。
+门面映射到注册表（9.2）的读 + 调用三方法 + 变更通知：
+
+- **list_providers()** → `[{ id, name, description, version }]`：已注册 provider 的轻量清单，无 schema。
+- **list_tools(provider_id)** → `[{ name, description, input_schema }]`：某 provider 的 tool，裸名 + schema，按需取、不一次性全推。
+- **call(provider_id, name, arguments)** → `ToolResult`：二级地址调用，内部按 `provider_id → runtime` 路由；异步，可流式 emit 事件。
+- **变更通知 / version**：按 **provider 粒度**——某 provider（模块）version 变即只失效它的 tool 列表，客户端按 provider 缓存。
+
+`list_providers` 列的是**已注册（active）的 provider**；catalog 里"可用未激活"的模块入口是导航 UX（8.3），走清单不走 tool 门面，两者别混。
 
 ### 10.2 门面可替换
 
-MCP、WebSocket、CLI 都是接在三件套上的门面，可并存、可替换、可增量。模块系统、命名空间、跨进程路由均不随门面变化。
+MCP、WebSocket、CLI 都是接在渐进式三方法上的门面，可并存、可替换、可增量。provider 注册表、二级地址、跨进程路由均不随门面变化；需要扁平视图的门面在自己的边界派生（不进核心契约）。
 
 ### 10.3 默认门面：WebSocket
 
 - 传输用 **WebSocket**（长连接、双向、低开销、本机/跨机皆可）。
-- 协议极简：`{id, type, name, args}`，`id` 用于异步请求/响应配对，`type` 区分 invoke/list/result/error/变更通知。
-- tool 变更走**主动推送**（WS 双向），`version` 字段作断线重连后的对账兜底。
+- 协议极简：`{id, type, provider_id, name, arguments}`，`id` 用于异步请求/响应配对（也用于关联流式事件），`type` 区分 list_providers / list_tools / call / result / event / error / 变更通知。
+- call 执行中的流式事件以 `type=event` + 同 `id` 推送，最终 `result` 收尾。
+- tool 变更走**主动推送**（WS 双向），按 provider 粒度的 `version` 作断线重连后的对账兜底。
 
-需对外开放或接入标准 Agent 生态时，增加一个 MCP 门面接到同一三件套即可。
+需对外开放或接入标准 Agent 生态时，增加一个 MCP 门面接到同一 `list_providers / list_tools / call` 即可。
 
 ## 11. 版本契约与兼容性
 
@@ -350,7 +398,7 @@ import { defineModule, type MainContext } from "@boundary-desktop/contract";
 
 export default defineModule<MainContext>({
   async activate(ctx) {
-    // 注册 tool —— 传裸名，基座登记为 `<id>.fetchTitle`，卸载自动回收
+    // 注册 tool —— 传裸名，基座按 (id, fetchTitle) 二级地址登记，卸载按 id 回收
     ctx.registerTool({
       name: "fetchTitle",
       schema: { type: "object", properties: { url: { type: "string" } } },
@@ -382,9 +430,9 @@ export default defineModule<MainContext>({
 ## 16. 分阶段
 
 1. **契约包**：`@boundary-desktop/contract` 落地——manifest / 生命周期 / ctx 三层 / tool 契约 + `HOST_API_VERSION` + `defineModule`。验证：类型完整、运行期导出可用。（已完成）
-2. **基座核心**：`ModuleRegistry` 生命周期状态机 + 全局 tool 注册表（命名空间前缀）+ in-flight drain 账本。验证：本地目录来源的 main 模块走 install→activate→replace→deactivate 全程，tool 注册/回收/重名检测正确。
+2. **基座核心**：`ModuleRegistry` 生命周期状态机（含 Failed 态 + 事务化转换 + 失败路径回收，见 5.4）+ provider 中心 tool 注册表（`register_provider` / `register`，`(provider_id, name)` 二级地址，模块即 provider）+ in-flight drain 账本。验证：本地目录来源的 main 模块走 install→activate→replace→deactivate 全程，tool 注册/回收/重名检测正确；钩子抛异常转 Failed 并按 provider_id 回收、不波及其它模块。
 3. **ctx 注入 + main 加载**：BaseContext 实现（auth/storage/api.request/notify/registerTool）+ main Loader（Node import 本地文件）。验证：示例 main 模块激活后 tool 可被调用。
-4. **对外 WS 门面**：list / invoke / version 三件套 + 变更主动推送。验证：外部 WS 客户端 list 到 tool、invoke 成功、模块热替换后收到变更通知。
+4. **对外 WS 门面**：list_providers / list_tools / call + 按 provider version 的渐进式门面 + 变更主动推送。验证：外部 WS 客户端 list_providers → list_tools 到某 provider 的 tool、call 成功（含流式 event）、模块热替换后收到该 provider 的变更通知。
 5. **renderer 加载 + UI 贡献（壳闭环）**：`apps/shell`（Electron 主进程 + BrowserWindow + `app://` 协议 + preload contextBridge + 主↔渲染 IPC tool 路由）+ React 基座壳（登录页 / 导航栏含 3 基座控件 / 主区域 / 主题，见 8.3）+ `RendererLoader`（`app://` 落本地 import，对标 MainLoader）+ RendererContext（container/theme/navigate/registerView/registerMenuItem）。验证：登录 → 壳起 → catalog 拉到一个示例 renderer 模块（"对话"入口 + 渲染视图）→ 导航栏出现入口 → 点开挂载，其 tool 经 IPC 路由可调。**先打通单模块闭环，不一次实现 6 个模块。**
 6. **远程来源 + catalog 对账**：CDN 来源（单一签名 catalog + 各产物 integrity）+ catalog 轮询/对账（install/replace/uninstall）+ dev 本地来源 HMR。验证：拉 catalog 验签、按 diff 增删换模块、灰度热替换不断连接；本地保存文件秒级热重载。
 
@@ -392,9 +440,10 @@ export default defineModule<MainContext>({
 
 - 契约包：类型完整覆盖 manifest / 生命周期 / 三层 ctx / tool；运行期 `import` 拿到 `HOST_API_VERSION` 与 `defineModule`。
 - 生命周期：模块走完状态机各受控迁移；热替换先起后落，切换期对外功能无中断；drain 保证在途调用不被丢弃。
-- 命名空间：跨模块同裸名 tool 不冲突；模块内重名注册时抛错；卸载按前缀回收无残留。
+- 故障收容：钩子（activate/deactivate）或 handler 抛异常 → 该模块转 Failed 并按 provider_id 回收账本，不波及基座与其它模块；activate 抛回滚到干净态、deactivate 抛仍强制清账本；call 超时按失败归因。
+- 二级地址：跨 provider 同裸名 tool 不冲突；provider 内重名注册时抛错；卸载按 provider_id 回收无残留。
 - main 加载：本地产物 Node import 成模块，tool 本地直接执行。
 - renderer 加载：`app://modules/<id>/<version>/entry.js` import 成模块，origin 稳定，CSP 放行；其 tool 经 IPC 路由被调用、结果回传。
-- 门面：外部 WS 客户端 list / invoke / 收变更推送；`version` 断线重连后对账正确。
+- 门面：外部 WS 客户端 list_providers / list_tools / call（含流式 event）/ 收变更推送；按 provider `version` 断线重连后对账正确。
 - 版本闸门：`hostApiVersion` 不满足时拒绝加载并提示升级。
 - 安全：远程产物 integrity 比对失败拒绝加载；清单签名校验失败拒绝；release build 拒绝本地无验签来源。
