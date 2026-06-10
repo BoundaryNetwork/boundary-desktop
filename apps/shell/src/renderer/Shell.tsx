@@ -40,6 +40,12 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     void window.hostApi.surface.reportForeground(activeId);
   }, [activeId]);
 
+  // 系统设置是基座级全屏弹层(renderer DOM),但 main 模块的 native view 在 DOM 之上会盖住它;
+  // 上报开合,main 据此强制隐藏/恢复主窗内所有 surface 的 native view。
+  useEffect(() => {
+    void window.hostApi.surface.reportOverlay(settingsOpen);
+  }, [settingsOpen]);
+
   // 模块请求前台(如 agent 驱动浏览器导航)→ 切到该模块,rail 高亮 + 区域浮出。
   useEffect(() => window.hostApi.surface.onForegroundRequest((id) => setActiveId(id)), []);
 

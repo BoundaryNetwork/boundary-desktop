@@ -14,6 +14,9 @@ export const IPC = {
   surfaceTheme: "surface:theme",
   // 壳 → main:把分离到独立窗的 main 模块合并回主窗(占位卡片的"合并回主窗口"按钮)
   surfaceMerge: "surface:merge",
+  // 壳 → main:基座级全屏弹层(如系统设置)开合;激活时强制隐藏主窗内所有 surface 的
+  // native view —— 它们在 renderer DOM 之上,否则会盖住 DOM 弹层
+  surfaceOverlay: "surface:overlay",
   // 壳 → main:无边框窗口下自绘红绿灯把系统三连键语义经 IPC 暴露
   windowMinimize: "window:minimize",
   windowClose: "window:close",

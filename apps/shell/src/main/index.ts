@@ -166,6 +166,8 @@ function registerIpc(): void {
     surfaces.setTheme(theme),
   );
   ipcMain.handle(IPC.surfaceMerge, (_e, id: string) => surfaces.merge(id));
+  // 基座级全屏弹层开合:激活时强制隐藏主窗内所有 surface 的 native view(否则盖住 DOM 弹层)
+  ipcMain.handle(IPC.surfaceOverlay, (_e, active: boolean) => surfaces.setOverlay(active));
 
   // 壳 → main:无边框窗口自绘红绿灯的窗口控制(按事件来源 webContents 定位窗口)。
   const winOf = (e: { sender: Electron.WebContents }): BrowserWindow | null =>

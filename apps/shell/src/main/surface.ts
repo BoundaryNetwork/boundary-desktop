@@ -148,6 +148,7 @@ export class SurfaceManager implements SurfaceProvider {
   #win: BrowserWindow | null = null;
   #foregroundId: string | null = null;
   #theme: "light" | "dark" = "light";
+  #overlayActive = false;
   #surfaces = new Map<string, ManagedSurface>();
 
   /** 绑定主窗:resize 即重新发布所有未分离 surface 的区域;窗口关闭解绑。 */
@@ -169,6 +170,15 @@ export class SurfaceManager implements SurfaceProvider {
   /** shell renderer 上报当前前台模块(rail 选中项);重新发布各 surface 可见性。 */
   setForeground(id: string | null): void {
     this.#foregroundId = id;
+    this.#publishAll();
+  }
+
+  /** 壳上报基座级全屏弹层(如系统设置)开合。native view 在 renderer DOM 之上、CSS 盖不住,
+   *  激活时强制隐藏主窗内所有 surface 的 view,让 DOM 弹层露出;关闭后回到前台规则。
+   *  分离到独立窗的 surface 不受影响(弹层只在主窗)。 */
+  setOverlay(active: boolean): void {
+    if (this.#overlayActive === active) return;
+    this.#overlayActive = active;
     this.#publishAll();
   }
 
@@ -216,10 +226,12 @@ export class SurfaceManager implements SurfaceProvider {
     return (surface as ManagedSurface).attach(view);
   }
 
-  /** 单个 surface 按当前主窗布局 + 前台规则发布区域(merge 回主窗后也调)。 */
+  /** 单个 surface 按当前主窗布局 + 前台规则发布区域(merge 回主窗后也调)。
+   *  基座弹层激活时一律隐藏(见 setOverlay)。 */
   publish(surface: ManagedSurface): void {
     if (!this.#win) return;
-    surface.publishMerged(this.#contentRegion(), this.#foregroundId === surface.id);
+    const foreground = !this.#overlayActive && this.#foregroundId === surface.id;
+    surface.publishMerged(this.#contentRegion(), foreground);
   }
 
   #publishAll(): void {

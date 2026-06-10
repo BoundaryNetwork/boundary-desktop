@@ -58,6 +58,8 @@ export interface HostApi {
     reportTheme(theme: "light" | "dark"): Promise<void>;
     /** 把分离到独立窗的 main 模块合并回主窗(占位卡片按钮调用)。 */
     merge(id: string): Promise<void>;
+    /** 上报基座级全屏弹层(如系统设置)开合;main 据此强制隐藏/恢复主窗内所有 surface 的 native view。 */
+    reportOverlay(active: boolean): Promise<void>;
     /** 订阅某 main 模块 surface 的分离态变化,驱动主窗"已分离"占位卡片显隐。 */
     onDetachedChange(listener: (id: string, detached: boolean) => void): () => void;
     /** 订阅模块的前台请求(如 agent 驱动浏览器导航),壳据此切 activeId 同步高亮。 */
