@@ -7,6 +7,7 @@ import { ChatApp } from "./ui/app";
 import { ChatWs } from "./protocol/ws";
 import { createFrameDispatcher } from "./protocol/handlers";
 import { useConversationStore } from "./state/conversation";
+import { useAgentStore } from "./state/agent";
 import { useConvStreamStore } from "./state/stream";
 import * as api from "./api/conversations";
 import cssText from "./ui/chat.css";
@@ -96,7 +97,7 @@ const mod = {
     useConversationStore.getState().setConversations([]);
     useConversationStore.getState().setCurrentId(null);
     useConvStreamStore.setState({ byConversation: {} });
-    api.resetInstance(); // reactivate 后按新 worker 重新解析 agent_instance_id
+    useAgentStore.getState().clearAll(); // reactivate 后按新 worker 重新拉 agent + 会话
   },
 };
 

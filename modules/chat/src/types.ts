@@ -114,14 +114,14 @@ export interface ConversationHistoryResponse {
   next_before?: string;
 }
 
-// worker 是多 agent-instance 的,会话端点靠 agent_instance_id 路由。无默认实例时该字段必填。
-export interface InstanceSummary {
+// worker 是多 agent-instance 的,会话端点靠 agent_instance_id 路由。
+export interface AgentSummary {
   agent_instance_id: string;
-  name?: string;
+  name: string;
+  default_model?: string;
 }
-export interface ListInstancesResponse {
-  instances?: InstanceSummary[];
-  default_instance_id?: string;
+export interface ListAgentsResponse {
+  agents?: AgentSummary[];
 }
 
 // ─── WS 出帧(client → server,判别字段 type)─────────────────────────────────

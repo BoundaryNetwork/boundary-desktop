@@ -22,21 +22,23 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 export function Composer({
+  value,
+  onChange,
   sending,
   onSend,
   onStop,
 }: {
+  value: string;
+  onChange(text: string): void;
   sending: boolean;
   onSend(text: string): void;
   onStop(): void;
 }): React.ReactElement {
-  const [text, setText] = React.useState("");
-
   const submit = (): void => {
-    const t = text.trim();
+    const t = value.trim();
     if (!t) return;
     onSend(t);
-    setText("");
+    onChange("");
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -51,9 +53,9 @@ export function Composer({
       <textarea
         className="bd-textarea"
         style={S.area}
-        value={text}
+        value={value}
         placeholder="今天要做点什么？"
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
       />
       {sending ? (
