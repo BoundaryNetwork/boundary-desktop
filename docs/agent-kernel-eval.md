@@ -1,7 +1,6 @@
 # 给 boundary-desktop 外挂 agentworkerd 作为 agent kernel
 
 日期:2026-06-10
-关联:`docs/chat-port-eval.md`(本文深挖其"缺 spawn/discovery 层"的部分)
 
 ## 目标
 
