@@ -18,6 +18,15 @@ const modulesRoot = join(repo, "modules");
 // renderer 模块对这些 bare specifier 的引用保持 external,交给 import map 解析到 vendor。
 const rendererExternal = ["react", "react-dom", "react-dom/client"];
 
+// CJS 依赖(如 zustand 依赖的 use-sync-external-store)在 ESM 输出里写的 require("react"),
+// 会被 esbuild 降成抛错的 __require。注入一个 require shim:把 "react" 解析到 external import
+// (经 import map → vendor),既消掉动态 require,又保持 React 单实例。
+const rendererBanner = {
+  js:
+    `import __react from "react";\n` +
+    `var require = (id) => { if (id === "react") return __react; throw new Error('Dynamic require of "' + id + '" is not supported'); };`,
+};
+
 // react CJS 的命名导出 esbuild 的 `export *` 检测不可靠,显式列出常用 hook/API。
 const REACT_NAMED = [
   "useState", "useEffect", "useRef", "useMemo", "useCallback", "useReducer",
@@ -85,6 +94,7 @@ async function buildModule({ dir, runtime }) {
     // renderer:external react,经 import map 指向 vendor。
     platform: main ? "node" : "browser",
     external: main ? ["electron"] : rendererExternal,
+    ...(main ? {} : { banner: rendererBanner }), // 见 rendererBanner:消掉 CJS 依赖的 require("react")
     jsx: "transform", // 经典 JSX:React.createElement,模块自带 import React
     loader: { ".css": "text" }, // 模块内 scoped 样式以字符串内联,运行时注入 <style>
     logLevel: "warning",
@@ -115,6 +125,7 @@ async function buildPage(dir, name) {
     outfile: join(outDir, "main.mjs"),
     platform: "browser",
     external: rendererExternal, // react 经页面 import map → vendor
+    banner: rendererBanner, // 见 rendererBanner:消掉 CJS 依赖的 require("react")
     jsx: "transform",
     logLevel: "warning",
   });
