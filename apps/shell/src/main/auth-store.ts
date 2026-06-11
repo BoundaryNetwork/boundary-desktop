@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { safeStorage } from "electron";
 
 /** 登录会话令牌(session_token, local_<uuid>)的本地落盘。可用时经 Electron safeStorage
@@ -35,7 +35,9 @@ export class SessionStore {
     const data = safeStorage.isEncryptionAvailable()
       ? safeStorage.encryptString(token)
       : Buffer.from(token, "utf8");
-    writeFileSync(this.#path, data);
+    // mode 仅在创建时生效;已存在的文件再 chmod 一次,保证每次写都是 owner-only(0o600)。
+    writeFileSync(this.#path, data, { mode: 0o600 });
+    chmodSync(this.#path, 0o600);
   }
 
   clear(): void {
