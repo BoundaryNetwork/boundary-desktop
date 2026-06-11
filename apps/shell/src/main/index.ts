@@ -9,6 +9,7 @@ import {
 } from "@boundary-desktop/host";
 import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
+import { ctxRetired, type CtxRetired } from "../shared/types.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
 import { ShellAuthDriver } from "./auth.js";
 import { SessionStore } from "./auth-store.js";
@@ -91,10 +92,16 @@ function shared(): SharedState {
   };
 }
 
-function requireCtx(aid: number): BaseContext {
+/** 跑一次出站 ctx 能力调用,把"激活退役"竞态收口成良性结果:
+ *  - ctx 在 → 正常执行(真实能力错误照常 reject,是该让模块看见的真错);
+ *  - aid 已退役(曾有效、现已释放)→ resolve 哨兵,**不抛错**,免得 electron 把
+ *    ipcMain.handle 的 reject 当 handler error 打日志;preload 据哨兵按能力形状收尾;
+ *  - aid 从未存在 → 抛错(真 bug,照常吵)。 */
+function ctxCall<T>(aid: number, fn: (ctx: BaseContext) => T | Promise<T>): Promise<T | CtxRetired> {
   const ctx = bridge.ctx(aid);
-  if (!ctx) throw new Error(`无效的 activation id ${aid}(模块未在激活态)`);
-  return ctx;
+  if (ctx) return Promise.resolve(fn(ctx));
+  if (bridge.isRetired(aid)) return Promise.resolve(ctxRetired());
+  throw new Error(`无效的 activation id ${aid}(模块未在激活态)`);
 }
 
 // 每个模块 id 一条串行链,防 activate/deactivate 并发交错。
@@ -244,38 +251,42 @@ function registerIpc(): void {
         aid: number;
         def: { name: string; schema: object; description?: string };
       },
-    ) => {
+    ) =>
       // handler 路由回 renderer 执行;返回的 Disposable 由 main ctx 自动 track,deactivate 时回收。
       // inv.caller 由基座在调用点注入,这里随调用一并转发给 renderer,使 renderer handler 也拿到来源。
-      requireCtx(aid).registerTool({
-        name: def.name,
-        schema: def.schema,
-        description: def.description,
-        handler: (args, inv) => bridge.invokeRendererTool(aid, def.name, args, inv.caller),
-      });
-    },
+      ctxCall(aid, (ctx) => {
+        // 返回的 Disposable 由 main ctx 内部 track 自动回收,不外传(也不可经 IPC 序列化)。
+        ctx.registerTool({
+          name: def.name,
+          schema: def.schema,
+          description: def.description,
+          handler: (args, inv) => bridge.invokeRendererTool(aid, def.name, args, inv.caller),
+        });
+      }),
   );
   ipcMain.handle(IPC.ctxInvokeTool, (_e, { aid, name, args }) =>
-    requireCtx(aid).invokeTool(name, args),
+    ctxCall(aid, (ctx) => ctx.invokeTool(name, args)),
   );
   ipcMain.handle(IPC.ctxNotify, (_e, { aid, opts }) =>
-    requireCtx(aid).notify(opts),
+    ctxCall(aid, (ctx) => ctx.notify(opts)),
   );
   ipcMain.handle(IPC.ctxApiRequest, (_e, { aid, opts }) =>
-    requireCtx(aid).api.request(opts),
+    ctxCall(aid, (ctx) => ctx.api.request(opts)),
   );
-  ipcMain.handle(IPC.ctxStorage, (_e, { aid, op, key, value }) => {
-    const s = requireCtx(aid).storage;
-    if (op === "get") return s.get(key);
-    if (op === "set") return s.set(key, value);
-    if (op === "delete") return s.delete(key);
-    return s.keys();
-  });
+  ipcMain.handle(IPC.ctxStorage, (_e, { aid, op, key, value }) =>
+    ctxCall(aid, (ctx) => {
+      const s = ctx.storage;
+      if (op === "get") return s.get(key);
+      if (op === "set") return s.set(key, value);
+      if (op === "delete") return s.delete(key);
+      return s.keys();
+    }),
+  );
   ipcMain.handle(IPC.ctxRequestLogin, (_e, { aid }) =>
-    requireCtx(aid).auth.requestLogin(),
+    ctxCall(aid, (ctx) => ctx.auth.requestLogin()),
   );
   ipcMain.handle(IPC.ctxRequestLogout, (_e, { aid }) =>
-    requireCtx(aid).auth.requestLogout(),
+    ctxCall(aid, (ctx) => ctx.auth.requestLogout()),
   );
 }
 

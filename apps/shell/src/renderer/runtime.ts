@@ -9,6 +9,7 @@ import type {
   ToolHandler,
   WebviewKernel,
 } from "@boundary-desktop/contract";
+import { ActivationRetiredError } from "../shared/types";
 import type { ActivateRequest, SharedState } from "../shared/types";
 
 interface ActiveModule {
@@ -16,6 +17,9 @@ interface ActiveModule {
   module: Module<RendererContext>;
   handlers: Map<string, ToolHandler>;
   disposables: Disposable[];
+  /** 本次激活是否已退役。deactivate 跑完 module.deactivate 后置位:此后出站 ctx 调用
+   *  (滞留的 async 链等)就地收尾,不再发 IPC——免得落到 main 已释放的 aid 上。 */
+  aborted: boolean;
 }
 
 const EMPTY_SHARED: SharedState = {
@@ -79,7 +83,13 @@ class RendererRuntime {
     if (!mod || typeof mod.activate !== "function") {
       throw new Error(`模块 ${req.id} 产物缺合法 default.activate`);
     }
-    const active: ActiveModule = { id: req.id, module: mod, handlers: new Map(), disposables: [] };
+    const active: ActiveModule = {
+      id: req.id,
+      module: mod,
+      handlers: new Map(),
+      disposables: [],
+      aborted: false,
+    };
     await mod.activate(this.#buildCtx(req, container, active));
     this.#active.set(req.aid, active);
   }
@@ -91,6 +101,8 @@ class RendererRuntime {
     try {
       await a.module.deactivate?.();
     } finally {
+      // module.deactivate 跑完才置位:其内部的 ctx 收尾调用(如 storage flush)仍要放行。
+      a.aborted = true;
       for (const d of a.disposables) d.dispose();
       const el = this.#containers.get(a.id);
       if (el) el.innerHTML = "";
@@ -132,9 +144,13 @@ class RendererRuntime {
       config: this.#readable<Record<string, unknown>>(() => this.#shared.config),
       network: this.#readable<NetworkState>(() => this.#shared.network),
       api: {
-        request: <T = unknown>(opts: ApiRequest): Promise<T> => b.apiRequest(aid, opts) as Promise<T>,
+        request: <T = unknown>(opts: ApiRequest): Promise<T> =>
+          active.aborted
+            ? Promise.reject(new ActivationRetiredError(aid))
+            : (b.apiRequest(aid, opts) as Promise<T>),
       },
       notify: (opts) => {
+        if (active.aborted) return; // void 能力:退役后 no-op
         void b.notify(aid, opts);
       },
       log: {
@@ -144,7 +160,9 @@ class RendererRuntime {
         track: (e, p) => console.info(`[${req.id}] track ${e}`, p ?? ""),
       },
       invokeTool: <T = unknown>(name: string, args: unknown): Promise<T> =>
-        b.invokeTool(aid, name, args) as Promise<T>,
+        active.aborted
+          ? Promise.reject(new ActivationRetiredError(aid))
+          : (b.invokeTool(aid, name, args) as Promise<T>),
       registerTool: (def) => {
         active.handlers.set(def.name, def.handler);
         void b.registerTool(aid, { name: def.name, schema: def.schema, description: def.description });
@@ -153,11 +171,21 @@ class RendererRuntime {
       on: () => track({ dispose: () => {} }), // MVP:渲染层暂无事件源
       storage: {
         get: <T = unknown>(key: string): Promise<T | null> =>
-          b.storage(aid, "get", key) as Promise<T | null>,
+          active.aborted
+            ? Promise.reject(new ActivationRetiredError(aid))
+            : (b.storage(aid, "get", key) as Promise<T | null>),
         set: <T = unknown>(key: string, value: T): Promise<void> =>
-          b.storage(aid, "set", key, value) as Promise<void>,
-        delete: (key: string): Promise<void> => b.storage(aid, "delete", key) as Promise<void>,
-        keys: (): Promise<string[]> => b.storage(aid, "keys") as Promise<string[]>,
+          active.aborted
+            ? Promise.reject(new ActivationRetiredError(aid))
+            : (b.storage(aid, "set", key, value) as Promise<void>),
+        delete: (key: string): Promise<void> =>
+          active.aborted
+            ? Promise.reject(new ActivationRetiredError(aid))
+            : (b.storage(aid, "delete", key) as Promise<void>),
+        keys: (): Promise<string[]> =>
+          active.aborted
+            ? Promise.reject(new ActivationRetiredError(aid))
+            : (b.storage(aid, "keys") as Promise<string[]>),
       },
       webview: RENDERER_WEBVIEW_STUB,
       container,
