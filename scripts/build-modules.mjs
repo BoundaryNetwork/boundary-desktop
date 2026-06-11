@@ -86,6 +86,7 @@ async function buildModule({ dir, runtime }) {
     platform: main ? "node" : "browser",
     external: main ? ["electron"] : rendererExternal,
     jsx: "transform", // 经典 JSX:React.createElement,模块自带 import React
+    loader: { ".css": "text" }, // 模块内 scoped 样式以字符串内联,运行时注入 <style>
     logLevel: "warning",
   });
   // 模块自带的 renderer 页(main 模块载入自己的 WebContentsView,如 chrome 工具栏 / newtab 主页):
