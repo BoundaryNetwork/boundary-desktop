@@ -16,7 +16,18 @@ export class WorkerApiDriver implements ApiDriver {
     if (!base) {
       throw new Error("agentworkerd 端点尚未就绪(worker 未起或还没写出 runtime.json)");
     }
-    const url = new URL(opts.path, base.endsWith("/") ? base : `${base}/`);
+    // 安全:opts.path 由模块提供(热插拔/远程加载,半受信)。必须是站内绝对路径——
+    // 拒绝绝对 URL 与协议相对(//host),否则 new URL 会把请求解析到外部源,而 worker
+    // token 紧接着贴上去 fetch → SSRF / token 外泄。构造后再校验 origin 未变,兜住
+    // 反斜杠等其它逃逸写法。
+    if (!opts.path.startsWith("/") || opts.path.startsWith("//")) {
+      throw new Error(`ctx.api.request: path 必须是站内绝对路径(/ 开头、非 //),收到:${opts.path}`);
+    }
+    const baseUrl = new URL(base.endsWith("/") ? base : `${base}/`);
+    const url = new URL(opts.path, baseUrl);
+    if (url.origin !== baseUrl.origin) {
+      throw new Error(`ctx.api.request: 跨源 path 不允许(${url.origin} ≠ ${baseUrl.origin})`);
+    }
     if (opts.query) {
       for (const [key, value] of Object.entries(opts.query)) {
         url.searchParams.set(key, String(value));
