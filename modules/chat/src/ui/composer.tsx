@@ -19,10 +19,10 @@ const S: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     borderRadius: "var(--r-5)",
     background: "var(--bg-1)",
-    border: "1px solid var(--line)",
+    borderWidth: 1,
+    borderStyle: "solid",
     transition: "border-color 120ms ease",
   },
-  boxFocus: { borderColor: "var(--accent-ring)" },
   badge: {
     fontSize: "var(--text-2)",
     color: "var(--fg-3)",
@@ -108,7 +108,7 @@ export function Composer({
 
   return (
     <div style={S.row}>
-      <div style={{ ...S.box, ...(focused ? S.boxFocus : null) }}>
+      <div style={{ ...S.box, borderColor: focused ? "var(--accent-ring)" : "var(--line)" }}>
         {inBrowseMode && badge ? (
           <div style={S.badge}>
             历史 {badge.current}/{badge.total}
