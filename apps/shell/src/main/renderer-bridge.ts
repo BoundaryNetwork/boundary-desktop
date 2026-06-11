@@ -48,6 +48,11 @@ export class RendererBridge {
   releaseCtx(aid: number): void {
     this.#ctxByAid.delete(aid);
   }
+  /** 该 aid 是否"曾经激活、现已退役":已分配过(≤ 高水位)但 ctx 已释放。
+   *  用于区分良性 teardown 竞态(退役)与真 bug(从未存在的 aid)。 */
+  isRetired(aid: number): boolean {
+    return aid >= 1 && aid <= this.#aidSeq && !this.#ctxByAid.has(aid);
+  }
 
   #request<T>(channel: string, payload: object): Promise<T> {
     const wc = this.#wc;

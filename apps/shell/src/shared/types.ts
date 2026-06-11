@@ -172,6 +172,34 @@ export interface ModuleBridge {
   requestLogout(aid: number): Promise<void>;
 }
 
+// ─── 激活退役(activation retirement)──────────────────────────────────────────
+// 出站 ctx 能力调用归属某次激活代际(aid),只在该代际存活期内有效。激活被停用后,
+// 仍在途的调用(输了 teardown 竞态)落到 main 的已释放 aid 上——这是良性取消,不是错误。
+// main 对"曾有效、现已退役"的 aid 不抛错(否则 electron 会把 ipcMain.handle 的 reject
+// 当 handler error 打日志),而是 resolve 这个哨兵;preload/runtime 据此把出站调用按
+// 能力形状收尾(取值类 reject、void 类 no-op)。"从未存在的 aid"仍是真 bug,照常抛错。
+
+export const CTX_RETIRED = "__bd_ctx_retired__" as const;
+
+/** main 对已退役 aid 的 ctx 调用回这个哨兵(而非抛错)。 */
+export type CtxRetired = { [CTX_RETIRED]: true };
+
+export function ctxRetired(): CtxRetired {
+  return { [CTX_RETIRED]: true };
+}
+
+export function isCtxRetired(v: unknown): v is CtxRetired {
+  return typeof v === "object" && v !== null && (v as Record<string, unknown>)[CTX_RETIRED] === true;
+}
+
+/** 出站 ctx 调用因激活退役被取消时的 reject 值(取值类能力用;void 类直接 no-op)。 */
+export class ActivationRetiredError extends Error {
+  constructor(aid: number) {
+    super(`activation ${aid} 已退役,ctx 调用取消`);
+    this.name = "ActivationRetiredError";
+  }
+}
+
 declare global {
   interface Window {
     hostApi: HostApi;

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AuthState } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
+import { ActivationRetiredError, isCtxRetired } from "../shared/types.js";
 import type {
   ActivateRequest,
   HostApi,
@@ -116,14 +117,36 @@ const moduleBridge: ModuleBridge = {
   },
 
   getShared: () => ipcRenderer.invoke(IPC.ctxGetShared) as Promise<SharedState>,
-  registerTool: (aid, def) => ipcRenderer.invoke(IPC.ctxRegisterTool, { aid, def }) as Promise<void>,
-  invokeTool: (aid, name, args) => ipcRenderer.invoke(IPC.ctxInvokeTool, { aid, name, args }),
-  notify: (aid, opts) => ipcRenderer.invoke(IPC.ctxNotify, { aid, opts }) as Promise<void>,
-  apiRequest: (aid, opts) => ipcRenderer.invoke(IPC.ctxApiRequest, { aid, opts }),
-  storage: (aid, op, key, value) =>
-    ipcRenderer.invoke(IPC.ctxStorage, { aid, op, key, value }),
-  requestLogin: (aid) => ipcRenderer.invoke(IPC.ctxRequestLogin, { aid }) as Promise<void>,
-  requestLogout: (aid) => ipcRenderer.invoke(IPC.ctxRequestLogout, { aid }) as Promise<void>,
+  // 出站 ctx 能力:main 对已退役 aid 回 CTX_RETIRED 哨兵(而非抛错)。按能力形状收尾——
+  // 取值类(invokeTool/apiRequest/storage)reject ActivationRetiredError 让在途链走 catch;
+  // void 类(registerTool/notify/requestLogin/requestLogout)直接 no-op resolve。
+  registerTool: async (aid, def) => {
+    await ipcRenderer.invoke(IPC.ctxRegisterTool, { aid, def });
+  },
+  invokeTool: async (aid, name, args) => {
+    const r = await ipcRenderer.invoke(IPC.ctxInvokeTool, { aid, name, args });
+    if (isCtxRetired(r)) throw new ActivationRetiredError(aid);
+    return r;
+  },
+  notify: async (aid, opts) => {
+    await ipcRenderer.invoke(IPC.ctxNotify, { aid, opts });
+  },
+  apiRequest: async (aid, opts) => {
+    const r = await ipcRenderer.invoke(IPC.ctxApiRequest, { aid, opts });
+    if (isCtxRetired(r)) throw new ActivationRetiredError(aid);
+    return r;
+  },
+  storage: async (aid, op, key, value) => {
+    const r = await ipcRenderer.invoke(IPC.ctxStorage, { aid, op, key, value });
+    if (isCtxRetired(r)) throw new ActivationRetiredError(aid);
+    return r;
+  },
+  requestLogin: async (aid) => {
+    await ipcRenderer.invoke(IPC.ctxRequestLogin, { aid });
+  },
+  requestLogout: async (aid) => {
+    await ipcRenderer.invoke(IPC.ctxRequestLogout, { aid });
+  },
 };
 
 contextBridge.exposeInMainWorld("hostApi", hostApi);

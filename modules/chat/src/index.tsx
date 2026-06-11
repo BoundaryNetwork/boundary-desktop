@@ -1,167 +1,124 @@
-// 示例 renderer 模块:用 TSX + React 编写,经构建工具链产出 app:// ESM 产物。
-// react / react-dom 为 external,运行时由壳经 import map 共享(模块不打包 React)。
-// RendererContext 为 type-only 引用(构建期抹除,无运行时依赖)。
-// 样式契约:公共控件用壳发布的设计系统类 bd-*(输入/按钮/胶囊),
-// 仅对话专属布局(欢迎区/消息流/气泡)走模块内联 + token。不依赖壳的私有类。
+// chat 模块入口:activate 接线协议/状态/UI,注册 chat.open + chat.ask。
+// react / react-dom external(壳 import map 共享);RendererContext type-only。
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { RendererContext } from "@boundary-desktop/contract";
+import { ChatApp } from "./ui/app";
+import { ChatWs } from "./protocol/ws";
+import { createFrameDispatcher } from "./protocol/handlers";
+import { useConversationStore } from "./state/conversation";
+import { useAgentStore } from "./state/agent";
+import { useConvStreamStore } from "./state/stream";
+import { useConnStore } from "./state/conn";
+import { usePrefsStore, DEFAULT_PREFS, type ChatPrefs } from "./state/prefs";
+import * as api from "./api/conversations";
+import cssText from "./ui/chat.css";
 
-const SUGGESTS = ["帮我分析上周的销售数据", "哪些商品的 ROI 最高？", "写一份双十一活动方案"];
+interface WorkerEndpoint {
+  addr: string;
+  port: number;
+}
 
-// 对话专属布局(非通用组件,留模块内)。
-const S: Record<string, React.CSSProperties> = {
-  root: {
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "var(--space-13) var(--space-11)",
-    gap: "var(--space-8)",
-  },
-  hello: { textAlign: "center", marginTop: "var(--space-13)" },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: "var(--r-5)",
-    background: "var(--accent-soft)",
-    color: "var(--accent)",
-    display: "grid",
-    placeItems: "center",
-    fontSize: "var(--text-6)",
-    margin: "0 auto var(--space-6)",
-  },
-  role: { color: "var(--fg-2)", fontSize: "var(--text-3)" },
-  feed: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 640,
-    overflowY: "auto",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-    padding: "var(--space-4) 0",
-  },
-  msg: {
-    maxWidth: "80%",
-    padding: "var(--space-4) var(--space-6)",
-    borderRadius: "var(--r-4)",
-    fontSize: "var(--text-3)",
-  },
-  msgUser: { alignSelf: "flex-end", background: "var(--accent)", color: "#fff" },
-  msgBot: { alignSelf: "flex-start", background: "var(--bg-1)", border: "1px solid var(--line)" },
-  suggests: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "var(--space-4)",
-    justifyContent: "center",
-    maxWidth: 640,
-  },
-  inputRow: { width: "100%", maxWidth: 640, display: "flex", gap: "var(--space-4)" },
-  // 对话输入是更高的 composer:复用 bd-input 外观,仅尺寸内联覆盖。
-  composer: { flex: 1, height: 44, padding: "0 var(--space-7)", borderRadius: "var(--r-5)" },
-  send: { height: 44, padding: "0 var(--space-9)", borderRadius: "var(--r-5)" },
-};
-
-function ChatApp({ ctx }: { ctx: RendererContext }): React.ReactElement {
-  const who = ctx.auth.get().user?.name ?? "你";
-  const [msgs, setMsgs] = React.useState<Array<{ role: "user" | "bot"; text: string }>>([]);
-  const [text, setText] = React.useState("");
-
-  async function send(q: string): Promise<void> {
-    if (!q.trim()) return;
-    setMsgs((m) => [...m, { role: "user", text: q }]);
-    setText("");
-    // 调用自己注册的 tool —— 经基座路由(renderer → main → renderer)
-    const res = (await ctx.invokeTool("chat.ask", { q })) as { answer?: string };
-    setMsgs((m) => [...m, { role: "bot", text: res?.answer ?? "(无回复)" }]);
-  }
-
-  return (
-    <div style={S.root}>
-      {/* 临时:验证跨模块前台切换——调浏览器自己注册的 open tool 把它切到前台。 */}
-      <button
-        type="button"
-        className="bd-chip"
-        style={{ alignSelf: "flex-end" }}
-        onClick={() => void ctx.invokeTool("browser.open", {})}
-      >
-        转到浏览器 →
-      </button>
-      <div style={S.hello}>
-        <div style={S.avatar}>小</div>
-        <h2>你好，我是小达</h2>
-        <p style={S.role}>店长助理 · 很高兴为你服务（{who}）</p>
-      </div>
-      <div style={S.feed}>
-        {msgs.map((m, i) => (
-          <div key={i} style={{ ...S.msg, ...(m.role === "user" ? S.msgUser : S.msgBot) }}>
-            {m.text}
-          </div>
-        ))}
-      </div>
-      <div style={S.suggests}>
-        {SUGGESTS.map((s) => (
-          <button key={s} type="button" className="bd-chip" onClick={() => void send(s)}>
-            {s}
-          </button>
-        ))}
-      </div>
-      <form
-        style={S.inputRow}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send(text);
-        }}
-      >
-        <input
-          className="bd-input"
-          style={S.composer}
-          type="text"
-          value={text}
-          placeholder="今天要做点什么？"
-          onChange={(e) => setText(e.target.value)}
-        />
-        <button type="submit" className="bd-btn bd-btn--primary" style={S.send}>
-          发送
-        </button>
-      </form>
-    </div>
-  );
+/** 从 ctx.config 读 agentworkerd.ws 端点拼 ws url。host 在发现 worker 后经 config 通道下发
+ *  agentworkerd = { http?, ws? },每项 { addr, port }(见 apps/shell/src/main/index.ts)。 */
+function wsBase(ctx: RendererContext): string | null {
+  const cfg = ctx.config.get() as { agentworkerd?: { ws?: WorkerEndpoint } };
+  const ws = cfg.agentworkerd?.ws;
+  return ws ? `ws://${ws.addr}:${ws.port}/ws` : null;
 }
 
 let root: Root | null = null;
+let ws: ChatWs | null = null;
+let styleEl: HTMLStyleElement | null = null;
+let configSub: { dispose(): void } | null = null;
+let prefsUnsub: (() => void) | null = null;
+let lastWsBase: string | null = null;
 
 const mod = {
   activate(ctx: RendererContext): void {
-    // tool handler 留在渲染进程,被调用时经 main → IPC 回这里执行
-    ctx.registerTool({
-      name: "ask",
-      schema: { type: "object", properties: { q: { type: "string" } }, required: ["q"] },
-      description: "向对话模块提问(示例,回声)",
-      handler: async (args) => {
-        const q = (args as { q?: string })?.q ?? "";
-        return { answer: `（示例回复）收到：${q}` };
-      },
+    styleEl = document.createElement("style");
+    styleEl.textContent = cssText;
+    document.head.appendChild(styleEl);
+
+    // 视图偏好:从 ctx.storage 恢复,变更时回写(best-effort,失败静默)。
+    void ctx.storage.get<Partial<ChatPrefs>>("prefs").then((saved) => {
+      if (saved) usePrefsStore.getState().set(saved);
     });
-    // open:把对话模块切到前台。别的模块经 invokeTool("chat.open") 调用即跳到本页。
+    prefsUnsub = usePrefsStore.subscribe((s) => {
+      const snapshot: ChatPrefs = {
+        showThinking: s.showThinking,
+        showToolCalls: s.showToolCalls,
+        submitOnEnter: s.submitOnEnter,
+      };
+      void ctx.storage.set("prefs", snapshot);
+    });
+
+    const dispatch = createFrameDispatcher((opts) => ctx.notify(opts));
+    ws = new ChatWs({
+      url: () => wsBase(ctx),
+      token: () => ctx.auth.getToken(), // 每次连接前现取,刷新/吊销后即最新
+      onFrame: dispatch,
+      onStatus: (connected) => useConnStore.getState().setConnected(connected),
+    });
+    lastWsBase = wsBase(ctx);
+    ws.connect();
+
+    // worker 重启换端口 → ws base 变才重连(无关 config 变化不打扰)。
+    configSub = ctx.config.subscribe(() => {
+      const next = wsBase(ctx);
+      if (next !== lastWsBase) {
+        lastWsBase = next;
+        ws?.reconnect();
+      }
+    });
+
+    // open:把对话模块切到前台(供别的模块 invokeTool("chat.open") 调用)。
     ctx.registerTool({
       name: "open",
       schema: { type: "object", properties: {} },
       description: "把对话模块切到前台",
       handler: async (_args, inv) => {
         ctx.navigate("chat");
-        ctx.notify({ level: "info", message: `对话由 ${inv.caller ?? "外部"} 打开` });
         return { ok: true, caller: inv.caller };
       },
     });
+    // ask:外部发起一次提问(无当前会话则新建),切到前台。
+    ctx.registerTool({
+      name: "ask",
+      schema: { type: "object", properties: { q: { type: "string" } }, required: ["q"] },
+      description: "向对话发起一次提问",
+      handler: async (args) => {
+        const q = (args as { q?: string })?.q ?? "";
+        ctx.navigate("chat");
+        if (ws && q.trim()) await api.ask(ctx, ws, q);
+        return { ok: true };
+      },
+    });
+
     root = createRoot(ctx.container);
-    root.render(<ChatApp ctx={ctx} />);
-    ctx.notify({ level: "info", message: "对话模块已就绪" });
+    root.render(<ChatApp ctx={ctx} ws={ws} />);
   },
+
   deactivate(): void {
     root?.unmount();
     root = null;
+    ws?.close();
+    ws = null;
+    configSub?.dispose();
+    configSub = null;
+    prefsUnsub?.();
+    prefsUnsub = null;
+    styleEl?.remove();
+    styleEl = null;
+    lastWsBase = null;
+    useConnStore.getState().setConnected(false);
+    usePrefsStore.getState().set(DEFAULT_PREFS); // reactivate 后由 ctx.storage 恢复
+    // 清模块自有状态:同 bundle deactivate→reactivate 时 store 是持久单例,
+    // 不清会让 selectConversation 命中"已有 entry 跳重拉"路径而显示陈旧历史。
+    useConversationStore.getState().setConversations([]);
+    useConversationStore.getState().setCurrentId(null);
+    useConvStreamStore.setState({ byConversation: {} });
+    useAgentStore.getState().clearAll(); // reactivate 后按新 worker 重新拉 agent + 会话
   },
 };
 
