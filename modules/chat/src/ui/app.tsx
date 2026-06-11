@@ -28,21 +28,33 @@ export function ChatApp({ ctx, ws }: { ctx: RendererContext; ws: ChatWs }): Reac
 
   React.useEffect(() => {
     // 先拉 agent 列表(多实例路由的归属源),选首个为当前 agent,再并发拉各 agent 会话。
+    // cancelled 守卫:StrictMode 下旧激活的 ChatApp 卸载即置位,旧链不再写本模块单例 store
+    //(出站 ctx 调用已由壳层 activation-retire 兜底,这里只挡模块自有状态的陈旧写入)。
+    let cancelled = false;
     void api
       .listAgents(ctx)
       .then((agents) => {
+        if (cancelled) return;
         const ag = useAgentStore.getState();
         ag.setAgents(agents);
         ag.setStatus("ready");
         if (ag.currentAgentId === undefined && agents[0]) ag.setCurrentAgent(agents[0].agent_instance_id);
       })
       .catch((e) => {
+        if (cancelled) return;
         useAgentStore.getState().setStatus("error");
         fail("加载 Agent 列表失败")(e);
       })
-      .then(() => api.loadAllConversations(ctx))
-      .then((list) => useConversationStore.getState().upsertMany(list))
-      .catch(fail("加载会话列表失败"));
+      .then(() => (cancelled ? [] : api.loadAllConversations(ctx)))
+      .then((list) => {
+        if (!cancelled) useConversationStore.getState().upsertMany(list);
+      })
+      .catch((e) => {
+        if (!cancelled) fail("加载会话列表失败")(e);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [ctx, fail]);
 
   const onSelect = (id: string): void => {
