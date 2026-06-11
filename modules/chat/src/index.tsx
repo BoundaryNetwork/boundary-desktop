@@ -96,6 +96,7 @@ const mod = {
     useConversationStore.getState().setConversations([]);
     useConversationStore.getState().setCurrentId(null);
     useConvStreamStore.setState({ byConversation: {} });
+    api.resetInstance(); // reactivate 后按新 worker 重新解析 agent_instance_id
   },
 };
 

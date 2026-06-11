@@ -25,7 +25,8 @@ export function ChatApp({ ctx, ws }: { ctx: RendererContext; ws: ChatWs }): Reac
 
   React.useEffect(() => {
     void api
-      .listConversations(ctx)
+      .ensureInstance(ctx) // 先解析 agent_instance_id(worker 多实例路由必需),再拉列表
+      .then(() => api.listConversations(ctx))
       .then((list) => useConversationStore.getState().setConversations(list))
       .catch(fail("加载会话列表失败"));
   }, [ctx, fail]);

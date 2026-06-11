@@ -114,24 +114,38 @@ export interface ConversationHistoryResponse {
   next_before?: string;
 }
 
+// worker 是多 agent-instance 的,会话端点靠 agent_instance_id 路由。无默认实例时该字段必填。
+export interface InstanceSummary {
+  agent_instance_id: string;
+  name?: string;
+}
+export interface ListInstancesResponse {
+  instances?: InstanceSummary[];
+  default_instance_id?: string;
+}
+
 // ─── WS 出帧(client → server,判别字段 type)─────────────────────────────────
 export interface WsTurnRequest {
   type: "turn";
   message: string;
   conversation_id?: string;
+  agent_instance_id?: string;
   stream?: boolean;
 }
 export interface WsStopTurnRequest {
   type: "stop_turn";
   conversation_id: string;
+  agent_instance_id?: string;
 }
 export interface WsSubscribeConversationRequest {
   type: "subscribe_conversation";
   conversation_id: string;
+  agent_instance_id?: string;
 }
 export interface WsUnsubscribeConversationRequest {
   type: "unsubscribe_conversation";
   conversation_id: string;
+  agent_instance_id?: string;
 }
 export interface WsPingRequest {
   type: "ping"; // 心跳;worker 回 { kind: "pong" }
