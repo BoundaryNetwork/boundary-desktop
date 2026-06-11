@@ -2,14 +2,22 @@ import React from "react";
 import { useConversationStore, useGroupedConversations, type Conversation } from "../state/conversation";
 import { useAgentStore } from "../state/agent";
 import { avatarLetter, displayName, hueFromId, type AgentLike } from "../lib/agent";
-import { ChevronRight, Search, Plus, X, Trash, MessageSquare } from "./icon";
+import { ChevronRight, Search, Plus, X, Trash, Edit, MessageSquare } from "./icon";
 
 function convTitle(c: Conversation): string {
   return c.name?.trim() || c.id.slice(0, 8);
 }
 
 // ─── 搜索框 ─────────────────────────────────────────────────────────────────────
-function SearchBox({ value, onChange }: { value: string; onChange(v: string): void }): React.ReactElement {
+function SearchBox({
+  value,
+  onChange,
+  inputRef,
+}: {
+  value: string;
+  onChange(v: string): void;
+  inputRef: React.RefObject<HTMLInputElement>;
+}): React.ReactElement {
   const [focused, setFocused] = React.useState(false);
   return (
     <div
@@ -25,6 +33,7 @@ function SearchBox({ value, onChange }: { value: string; onChange(v: string): vo
     >
       <Search size={14} style={{ color: "var(--fg-3)", flex: "none" }} />
       <input
+        ref={inputRef}
         type="text"
         value={value}
         placeholder="搜索会话"
@@ -188,22 +197,75 @@ function SessionLine({
   active,
   onPick,
   onDelete,
+  onRename,
 }: {
   conv: Conversation;
   active: boolean;
   onPick(): void;
   onDelete(): void;
+  onRename(name: string): void;
 }): React.ReactElement {
   const [hovered, setHovered] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(() => convTitle(conv));
   const bg = active ? "var(--accent-soft)" : hovered ? "var(--bg-2)" : "transparent";
   const color = active ? "var(--accent)" : "var(--fg-1)";
 
+  const submit = (): void => {
+    const next = draft.trim();
+    setEditing(false);
+    if (next && next !== convTitle(conv)) onRename(next);
+  };
+
+  if (editing) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-4)",
+          padding: "var(--space-3)",
+          borderRadius: "var(--r-3)",
+          background: "var(--bg-3)",
+        }}
+      >
+        <span aria-hidden="true" style={{ width: 14, height: 14, flex: "none", display: "inline-grid", placeItems: "center", color: "var(--fg-3)" }}>
+          <MessageSquare size={14} />
+        </span>
+        <input
+          autoFocus
+          value={draft}
+          maxLength={120}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={submit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setEditing(false);
+            }
+          }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: "var(--text-3)",
+            fontFamily: "inherit",
+            color: "var(--fg-0)",
+            background: "var(--bg-1)",
+            border: "1px solid var(--accent-ring)",
+            outline: "none",
+            borderRadius: "var(--r-2)",
+            padding: "var(--space-2) var(--space-4)",
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ position: "relative" }}
-    >
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ position: "relative" }}>
       <button
         type="button"
         onClick={onPick}
@@ -224,48 +286,40 @@ function SessionLine({
       >
         <span
           aria-hidden="true"
-          style={{
-            width: 14,
-            height: 14,
-            flex: "none",
-            display: "inline-grid",
-            placeItems: "center",
-            color: active ? "var(--accent)" : "var(--fg-3)",
-          }}
+          style={{ width: 14, height: 14, flex: "none", display: "inline-grid", placeItems: "center", color: active ? "var(--accent)" : "var(--fg-3)" }}
         >
           <MessageSquare size={14} />
         </span>
-        <span
-          style={{
-            flex: 1,
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {convTitle(conv)}
         </span>
         {hovered ? (
-          <span
-            role="button"
-            aria-label="删除会话"
-            title="删除"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            style={{
-              width: 20,
-              height: 20,
-              flex: "none",
-              display: "inline-grid",
-              placeItems: "center",
-              color: "var(--fg-2)",
-              borderRadius: "var(--r-2)",
-            }}
-          >
-            <Trash size={12} />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)", flex: "none" }}>
+            <span
+              role="button"
+              aria-label="重命名会话"
+              title="重命名"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDraft(convTitle(conv));
+                setEditing(true);
+              }}
+              style={{ width: 20, height: 20, display: "inline-grid", placeItems: "center", color: "var(--fg-2)", borderRadius: "var(--r-2)" }}
+            >
+              <Edit size={12} />
+            </span>
+            <span
+              role="button"
+              aria-label="删除会话"
+              title="删除"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              style={{ width: 20, height: 20, display: "inline-grid", placeItems: "center", color: "var(--fg-2)", borderRadius: "var(--r-2)" }}
+            >
+              <Trash size={12} />
+            </span>
           </span>
         ) : null}
       </button>
@@ -279,11 +333,13 @@ function ExpandedSessions({
   currentId,
   onPick,
   onDelete,
+  onRename,
 }: {
   sessions: Conversation[];
   currentId: string | null;
   onPick(c: Conversation): void;
   onDelete(id: string): void;
+  onRename(id: string, name: string): void;
 }): React.ReactElement {
   return (
     <div
@@ -307,9 +363,21 @@ function ExpandedSessions({
             active={c.id === currentId}
             onPick={() => onPick(c)}
             onDelete={() => onDelete(c.id)}
+            onRename={(name) => onRename(c.id, name)}
           />
         ))
       )}
+    </div>
+  );
+}
+
+// ─── 骨架加载 ─────────────────────────────────────────────────────────────────────
+function SkeletonList(): React.ReactElement {
+  return (
+    <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      {[80, 70, 75].map((w, i) => (
+        <div key={i} className="oc-skeleton" style={{ width: `${w}%`, height: 32, borderRadius: "var(--r-3)" }} />
+      ))}
     </div>
   );
 }
@@ -319,10 +387,12 @@ export function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  onRename,
 }: {
   onSelect(id: string): void;
   onNew(): void;
   onDelete(id: string): void;
+  onRename(id: string, name: string): void;
 }): React.ReactElement {
   const agentsRaw = useAgentStore((s) => s.agents);
   const status = useAgentStore((s) => s.status);
@@ -334,9 +404,22 @@ export function Sidebar({
 
   const [search, setSearch] = React.useState("");
   const [expandedAgentId, setExpandedAgentId] = React.useState<string | null>(currentAgentId ?? null);
+  const searchRef = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => {
     if (currentAgentId) setExpandedAgentId(currentAgentId);
   }, [currentAgentId]);
+
+  // ⌘F / Ctrl+F 聚焦搜索框。
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const agents = React.useMemo<AgentLike[]>(
     () => agentsRaw.map((a) => ({ id: a.agent_instance_id, name: a.name })),
@@ -377,7 +460,7 @@ export function Sidebar({
       }}
     >
       <div style={{ padding: "var(--space-6) var(--space-6) var(--space-3)", flex: "none" }}>
-        <SearchBox value={search} onChange={setSearch} />
+        <SearchBox value={search} onChange={setSearch} inputRef={searchRef} />
       </div>
 
       <div
@@ -390,7 +473,7 @@ export function Sidebar({
         }}
       >
         {status === "loading" && agents.length === 0 ? (
-          <div style={{ padding: "var(--space-6)", color: "var(--fg-3)", fontSize: "var(--text-2)" }}>加载中…</div>
+          <SkeletonList />
         ) : status === "error" && agents.length === 0 ? (
           <div style={{ padding: "var(--space-6)", color: "var(--err)", fontSize: "var(--text-2)" }}>加载失败</div>
         ) : agents.length === 0 ? (
@@ -419,6 +502,7 @@ export function Sidebar({
                     currentId={currentId}
                     onPick={handlePickSession}
                     onDelete={onDelete}
+                    onRename={onRename}
                   />
                 ) : null}
               </React.Fragment>

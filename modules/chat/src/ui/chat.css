@@ -87,6 +87,21 @@
   opacity: 1;
 }
 
+/* 侧栏加载骨架 */
+.oc-skeleton {
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-1) 37%, var(--bg-2) 63%);
+  background-size: 400% 100%;
+  animation: oc-skeleton-shimmer 1.4s ease infinite;
+}
+@keyframes oc-skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
 /* 输入中三点动画 */
 .oc-typing {
   display: inline-flex;

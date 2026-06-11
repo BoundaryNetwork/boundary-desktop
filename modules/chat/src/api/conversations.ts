@@ -101,6 +101,21 @@ export async function createConversation(ctx: RendererContext, name?: string): P
   };
 }
 
+/** 重命名会话:POST /api/conversations/:id/rename { name } → 更新列表。 */
+export async function renameConversation(
+  ctx: RendererContext,
+  id: string,
+  name: string,
+): Promise<void> {
+  const res = await ctx.api.request<{ conversation_id: string; name?: string }>({
+    method: "POST",
+    path: `/api/conversations/${id}/rename`,
+    query: routedQuery(convAgentId(id)),
+    body: { name },
+  });
+  useConversationStore.getState().rename(res.conversation_id, res.name ?? name);
+}
+
 export async function deleteConversationApi(ctx: RendererContext, id: string): Promise<void> {
   await ctx.api.request({
     method: "DELETE",

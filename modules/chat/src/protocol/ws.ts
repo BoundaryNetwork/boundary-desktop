@@ -8,6 +8,8 @@ export interface ChatWsOptions {
   /** 入帧分发(交给 handlers 的 dispatcher);pong 在本类内消费,不外抛。 */
   onFrame(frame: ServerMessage): void;
   onOpen?(): void;
+  /** 连接态变化:open 时 true,close/teardown 时 false。供 composer 决定 placeholder/禁用。 */
+  onStatus?(connected: boolean): void;
 }
 
 const MAX_BACKOFF_MS = 30_000;
@@ -59,6 +61,7 @@ export class ChatWs {
       this.#attempt = 0;
       this.#flushPending();
       this.#startHeartbeat();
+      this.#opts.onStatus?.(true);
       this.#opts.onOpen?.();
     };
     ws.onmessage = (ev) => {
@@ -78,6 +81,7 @@ export class ChatWs {
     ws.onclose = () => {
       this.#clearHeartbeat();
       this.#ws = null;
+      this.#opts.onStatus?.(false);
       if (!this.#closedByUser) this.#scheduleReconnect();
     };
     ws.onerror = () => {
@@ -168,6 +172,8 @@ export class ChatWs {
     this.#clearHeartbeat();
     const ws = this.#ws;
     if (!ws) return;
+    // 主动拆 socket(reconnect/close)前置 false:此处已 null 掉 onclose,不会再回调。
+    this.#opts.onStatus?.(false);
     ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
     try {
       ws.close();

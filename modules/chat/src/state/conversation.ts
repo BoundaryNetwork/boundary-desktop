@@ -16,6 +16,7 @@ interface ConversationStoreState {
   upsertMany(list: Conversation[]): void;
   setCurrentId(id: string | null): void;
   upsert(conv: Conversation): void;
+  rename(id: string, name: string): void;
   remove(id: string): void;
 }
 
@@ -40,6 +41,10 @@ export const useConversationStore = create<ConversationStoreState>((set) => ({
       }
       return { conversations: [conv, ...s.conversations] };
     }),
+  rename: (id, name) =>
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, name } : c)),
+    })),
   remove: (id) =>
     set((s) => ({
       conversations: s.conversations.filter((c) => c.id !== id),

@@ -9,6 +9,8 @@ import { createFrameDispatcher } from "./protocol/handlers";
 import { useConversationStore } from "./state/conversation";
 import { useAgentStore } from "./state/agent";
 import { useConvStreamStore } from "./state/stream";
+import { useConnStore } from "./state/conn";
+import { usePrefsStore, DEFAULT_PREFS, type ChatPrefs } from "./state/prefs";
 import * as api from "./api/conversations";
 import cssText from "./ui/chat.css";
 
@@ -29,6 +31,7 @@ let root: Root | null = null;
 let ws: ChatWs | null = null;
 let styleEl: HTMLStyleElement | null = null;
 let configSub: { dispose(): void } | null = null;
+let prefsUnsub: (() => void) | null = null;
 let lastWsBase: string | null = null;
 
 const mod = {
@@ -37,11 +40,25 @@ const mod = {
     styleEl.textContent = cssText;
     document.head.appendChild(styleEl);
 
+    // 视图偏好:从 ctx.storage 恢复,变更时回写(best-effort,失败静默)。
+    void ctx.storage.get<Partial<ChatPrefs>>("prefs").then((saved) => {
+      if (saved) usePrefsStore.getState().set(saved);
+    });
+    prefsUnsub = usePrefsStore.subscribe((s) => {
+      const snapshot: ChatPrefs = {
+        showThinking: s.showThinking,
+        showToolCalls: s.showToolCalls,
+        submitOnEnter: s.submitOnEnter,
+      };
+      void ctx.storage.set("prefs", snapshot);
+    });
+
     const dispatch = createFrameDispatcher((opts) => ctx.notify(opts));
     ws = new ChatWs({
       url: () => wsBase(ctx),
       token: () => ctx.auth.getToken(), // 每次连接前现取,刷新/吊销后即最新
       onFrame: dispatch,
+      onStatus: (connected) => useConnStore.getState().setConnected(connected),
     });
     lastWsBase = wsBase(ctx);
     ws.connect();
@@ -89,9 +106,13 @@ const mod = {
     ws = null;
     configSub?.dispose();
     configSub = null;
+    prefsUnsub?.();
+    prefsUnsub = null;
     styleEl?.remove();
     styleEl = null;
     lastWsBase = null;
+    useConnStore.getState().setConnected(false);
+    usePrefsStore.getState().set(DEFAULT_PREFS); // reactivate 后由 ctx.storage 恢复
     // 清模块自有状态:同 bundle deactivate→reactivate 时 store 是持久单例,
     // 不清会让 selectConversation 命中"已有 entry 跳重拉"路径而显示陈旧历史。
     useConversationStore.getState().setConversations([]);

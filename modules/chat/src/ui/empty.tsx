@@ -41,7 +41,7 @@ const S: Record<string, React.CSSProperties> = {
     placeItems: "center",
     color: "var(--accent)",
   },
-  greeting: { fontSize: "var(--text-7)", fontWeight: 500, color: "var(--fg-0)" },
+  greeting: { fontSize: "var(--text-9)", fontWeight: 500, color: "var(--fg-0)" },
   line: { width: 48, height: 2, borderRadius: 9999, background: "var(--accent-ring)" },
   desc: { fontSize: "var(--text-3)", color: "var(--fg-2)" },
   bottom: {

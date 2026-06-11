@@ -1,11 +1,14 @@
 import React from "react";
 import type { RenderUnit, AssistantTurnUnit } from "../render/units";
 import type { ToolCard } from "../render/tool";
+import type { TurnUsage } from "../types";
 import { renderMarkdown } from "../render/markdown";
+import { usePrefsStore } from "../state/prefs";
+import { Bot, Copy, Check } from "./icon";
 
 const S: Record<string, React.CSSProperties> = {
+  userRow: { display: "flex", flexDirection: "column", alignItems: "flex-end" },
   user: {
-    alignSelf: "flex-end",
     maxWidth: "78%",
     padding: "var(--space-4) var(--space-6)",
     borderRadius: "var(--r-4)",
@@ -21,6 +24,25 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "var(--space-3)",
+  },
+  agentRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    color: "var(--fg-2)",
+    fontSize: "var(--text-2)",
+    fontFamily: "var(--font-mono, monospace)",
+  },
+  avatar: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 20,
+    height: 20,
+    borderRadius: "var(--r-circle, 9999px)",
+    background: "var(--accent-soft)",
+    color: "var(--accent)",
+    flexShrink: 0,
   },
   thinking: {
     fontSize: "var(--text-2)",
@@ -41,8 +63,49 @@ const S: Record<string, React.CSSProperties> = {
   toolErr: { borderColor: "var(--danger, #e5484d)" },
   toolName: { fontFamily: "var(--font-mono, monospace)", fontWeight: 600 },
   pre: { margin: "var(--space-2) 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" },
-  meta: { fontSize: "var(--text-2)", color: "var(--fg-3, var(--fg-2))" },
+  meta: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    fontFamily: "var(--font-mono, monospace)",
+    fontSize: "var(--text-1)",
+    color: "var(--fg-3, var(--fg-2))",
+  },
+  cancelled: { fontSize: "var(--text-2)", color: "var(--warn, var(--fg-2))" },
+  copyBtn: {
+    width: 22,
+    height: 22,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: 0,
+    borderRadius: "var(--r-2)",
+    background: "transparent",
+    cursor: "pointer",
+    padding: 0,
+  },
 };
+
+function CopyButton({ text }: { text: string }): React.ReactElement {
+  const [copied, setCopied] = React.useState(false);
+  const onClick = (): void => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      title="复制"
+      aria-label="复制消息内容"
+      onClick={onClick}
+      style={{ ...S.copyBtn, color: copied ? "var(--accent)" : "var(--fg-3)" }}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+    </button>
+  );
+}
 
 function ThinkingBlock({ thinking }: { thinking: { text: string; streaming: boolean } }): React.ReactElement {
   return (
@@ -90,25 +153,92 @@ function AssistantText({ text }: { text: string }): React.ReactElement {
   );
 }
 
-export function Line({ unit }: { unit: RenderUnit }): React.ReactElement | null {
-  if (unit.kind === "user") {
-    return <div style={S.user}>{unit.message.content}</div>;
+function formatTime(iso?: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
   }
-  if (unit.kind === "system") {
-    return <div style={S.meta}>{unit.text}</div>;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) {
+    const k = n / 1000;
+    const s = k.toFixed(1);
+    return (s.endsWith(".0") ? String(Math.round(k)) : s) + "k";
   }
-  const turn: AssistantTurnUnit = unit;
-  const emptyStreaming =
-    turn.streaming && !turn.text && !turn.thinking && turn.tools.length === 0;
+  return String(n);
+}
+
+function UsageBadges({ usage }: { usage: TurnUsage }): React.ReactElement {
   return (
-    <div style={S.turn}>
-      {turn.thinking && <ThinkingBlock thinking={turn.thinking} />}
-      {turn.tools.map((t) => (
-        <ToolCardView key={t.id} card={t} />
-      ))}
-      {turn.text && <AssistantText text={turn.text} />}
-      {emptyStreaming && <TypingDots />}
-      {turn.cancelled && <div style={S.meta}>已停止</div>}
+    <>
+      <span title="输入 tokens">↑{formatTokens(usage.input_tokens)}</span>
+      <span title="输出 tokens">↓{formatTokens(usage.output_tokens)}</span>
+    </>
+  );
+}
+
+function UserLine({ unit }: { unit: Extract<RenderUnit, { kind: "user" }> }): React.ReactElement {
+  const text = unit.message.content;
+  return (
+    <div style={S.userRow}>
+      <div style={S.user}>{text}</div>
+      <div style={{ ...S.meta, marginTop: "var(--space-2)" }}>
+        {text.trim() ? <CopyButton text={text} /> : null}
+        <span>You{unit.message.timestamp ? ` · ${formatTime(unit.message.timestamp)}` : ""}</span>
+      </div>
     </div>
   );
+}
+
+function AssistantLine({
+  turn,
+  agentName,
+}: {
+  turn: AssistantTurnUnit;
+  agentName?: string;
+}): React.ReactElement {
+  const showThinking = usePrefsStore((s) => s.showThinking);
+  const showToolCalls = usePrefsStore((s) => s.showToolCalls);
+
+  const name = agentName ?? "Assistant";
+  const renderThinking = turn.thinking !== null && showThinking;
+  const renderTools = turn.tools.length > 0 && showToolCalls;
+  const showTyping = turn.streaming && !turn.thinking?.streaming;
+  const usage = turn.finalAssistant?.usage;
+  const ts = turn.finalAssistant?.timestamp;
+
+  return (
+    <div style={S.turn}>
+      <div style={S.agentRow}>
+        <span style={S.avatar}>
+          <Bot size={12} />
+        </span>
+        <span>{name}</span>
+      </div>
+      {renderThinking && turn.thinking ? <ThinkingBlock thinking={turn.thinking} /> : null}
+      {renderTools ? turn.tools.map((t) => <ToolCardView key={t.id} card={t} />) : null}
+      {turn.text ? <AssistantText text={turn.text} /> : null}
+      {showTyping ? <TypingDots /> : null}
+      {turn.cancelled ? <div style={S.cancelled}>已停止</div> : null}
+      {!turn.streaming ? (
+        <div style={S.meta}>
+          <span>
+            {name}
+            {ts ? ` · ${formatTime(ts)}` : ""}
+          </span>
+          {usage ? <UsageBadges usage={usage} /> : null}
+          {turn.text.trim() ? <CopyButton text={turn.text} /> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function Line({ unit, agentName }: { unit: RenderUnit; agentName?: string }): React.ReactElement | null {
+  if (unit.kind === "user") return <UserLine unit={unit} />;
+  if (unit.kind === "system") return <div style={S.meta}>{unit.text}</div>;
+  return <AssistantLine turn={unit} agentName={agentName} />;
 }
