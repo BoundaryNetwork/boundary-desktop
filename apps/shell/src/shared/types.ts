@@ -26,6 +26,59 @@ export interface SharedState {
   network: NetworkState;
 }
 
+/** GET /api/auth/profile 的完整个人资料(壳的个人信息页用;非模块契约,不进 contract)。
+ *  字段对齐 ai-agent 本地 API 的 LocalProfileResponse。 */
+export interface ProfileInfo {
+  account_id: string;
+  account: string;
+  display_name: string;
+  role: string;
+  tenant_id?: string;
+  phone?: string;
+  nickname?: string;
+  preferences?: string;
+}
+
+/** GET /local/status 的聚合状态(壳的系统状态指示用;字段对齐 ai-agent LocalStatusResponse)。
+ *  public 端点,无需令牌。worker 端点尚未发现时整体取 null。 */
+export interface LocalStatus {
+  phase:
+    | "starting"
+    | "needs_login"
+    | "needs_device_activation"
+    | "runtime_bootstrapping"
+    | "ready"
+    | "degraded"
+    | "draining"
+    | "stopping";
+  status: "pending" | "action_required" | "ok" | "degraded" | "error";
+  message: string;
+  worker: {
+    state: "starting" | "ready" | "draining" | "stopping";
+    pid: number;
+    version: string;
+  };
+  gateway: {
+    state: "disconnected" | "connecting" | "connected" | "reconnecting";
+    authenticated: boolean;
+    last_error: string | null;
+  };
+  /** worker 未配置 device manager 时为 null(免设备模式,登录即可达 ready)。 */
+  device: {
+    state: "not_activated" | "active" | "revoked" | "suspended";
+    device_id: string | null;
+  } | null;
+  runtime: { attached: boolean; configured: boolean; target: string; runtimes: unknown[] };
+}
+
+/** 运行状态页要的壳侧信息(非 worker HTTP 提供):app 版本 + 当前 worker spawn 时刻。 */
+export interface WorkerInfo {
+  /** boundary-desktop 应用版本(app.getVersion())。 */
+  desktopVersion: string;
+  /** 当前 worker 这一代的 spawn 时刻(ms epoch);尚未 spawn 为 null。供 UPTIME / STARTED。 */
+  startedAt: number | null;
+}
+
 /** main 让 renderer runtime 激活某模块的指令。 */
 export interface ActivateRequest {
   aid: number;
@@ -40,12 +93,30 @@ export interface HostApi {
   platform: string;
   /** 当前运行环境(local/staging/prod),壳据此显示角标、区分多环境。 */
   env(): Promise<string>;
+  /** agentworkerd 运行状态(供 rail 的运行状态页)。 */
+  worker: {
+    /** 聚合状态(GET /local/status)。worker 端点尚未就绪时为 null。 */
+    status(): Promise<LocalStatus | null>;
+    /** 壳侧信息:app 版本 + 当前 worker spawn 时刻。 */
+    info(): Promise<WorkerInfo>;
+    /** 手动重启 worker(优雅停 + 立即重生)。 */
+    restart(): Promise<void>;
+  };
   auth: {
     getState(): Promise<AuthState>;
     requestLogin(): Promise<void>;
     submitLogin(phone: string, password: string): Promise<{ ok: boolean; error?: string }>;
     requestLogout(): Promise<void>;
     onChange(listener: (state: AuthState) => void): () => void;
+    /** 个人信息页:读完整 profile。 */
+    getProfile(): Promise<ProfileInfo>;
+    /** 个人信息页:改昵称/个性化信息(省略=不变,空串=清空),返回更新后的 profile。 */
+    updateProfile(patch: { nickname?: string; preferences?: string }): Promise<ProfileInfo>;
+    /** 个人信息页:改登录密码。 */
+    changePassword(
+      currentPassword: string,
+      newPassword: string,
+    ): Promise<{ ok: boolean; error?: string }>;
   };
   modules: {
     list(): Promise<ModuleEntry[]>;

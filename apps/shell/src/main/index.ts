@@ -11,6 +11,8 @@ import type { BaseContext } from "@boundary-desktop/contract";
 import { IPC } from "../shared/ipc.js";
 import type { ModuleEntry, SharedState } from "../shared/types.js";
 import { ShellAuthDriver } from "./auth.js";
+import { SessionStore } from "./auth-store.js";
+import { fetchLocalStatus } from "./status.js";
 import {
   registerAppProtocol,
   registerAppProtocolForSession,
@@ -34,9 +36,13 @@ registerAppScheme(); // 必须在 app ready 前
 
 const bridge = new RendererBridge();
 const surfaces = new SurfaceManager();
-const authDriver = new ShellAuthDriver();
 // agentworkerd 进程监管器:壳 spawn 并托管 worker 子进程,发现其本地 HTTP/WS 端点。
 const worker = new WorkerSupervisor();
+// 登录驱动:接 worker 本地认证 HTTP(/api/auth/*);session_token 经 safeStorage 落盘跨重启复登。
+const authDriver = new ShellAuthDriver({
+  baseUrl: () => worker.httpBaseUrl(),
+  store: new SessionStore(join(app.getPath("userData"), "auth-session.bin")),
+});
 // 落盘 storage:模块 ctx.storage 跨重启留存(默认内存后端进程退出即丢)。
 const host = new HostServices({
   auth: authDriver,
@@ -72,6 +78,9 @@ const registry = new Registry({
   capabilityHost: host,
   surfaceProvider: surfaces,
 });
+
+// 开机复登的落定信号:authGetState 等它再答。worker.start 后赋为真正的复登 promise。
+let restoreSettled: Promise<unknown> = Promise.resolve();
 
 function shared(): SharedState {
   return {
@@ -135,14 +144,36 @@ async function activateAutostart(): Promise<void> {
 
 function registerIpc(): void {
   ipcMain.handle(IPC.appEnv, () => activeEnv);
+  // 壳 → main:运行状态页 —— 聚合状态(public,baseUrl 实时取自 supervisor 发现的端点)、
+  // 壳侧信息(app 版本 + worker spawn 时刻)、手动重启
+  ipcMain.handle(IPC.workerStatus, () => fetchLocalStatus(worker.httpBaseUrl()));
+  ipcMain.handle(IPC.workerInfo, () => ({
+    desktopVersion: app.getVersion(),
+    startedAt: worker.startedAt(),
+  }));
+  ipcMain.handle(IPC.workerRestart, () => worker.restart());
 
   // 壳 → main:登录
-  ipcMain.handle(IPC.authGetState, () => host.getAuthState());
+  // 等开机复登落定再答 —— 渲染层据此决定渲染 Shell 还是 Login,避免已登录用户瞬间看到登录页。
+  ipcMain.handle(IPC.authGetState, async () => {
+    await restoreSettled;
+    return host.getAuthState();
+  });
   ipcMain.handle(IPC.authRequestLogin, () => host.requestLogin());
   ipcMain.handle(IPC.authSubmitLogin, (_e, phone: string, password: string) =>
     authDriver.submit(phone, password),
   );
   ipcMain.handle(IPC.authRequestLogout, () => host.requestLogout());
+  // 个人信息页:读/改 profile、改密码,直接委托登录驱动(它持当前 session token)
+  ipcMain.handle(IPC.authGetProfile, () => authDriver.getProfile());
+  ipcMain.handle(
+    IPC.authUpdateProfile,
+    (_e, patch: { nickname?: string; preferences?: string }) =>
+      authDriver.updateProfile(patch),
+  );
+  ipcMain.handle(IPC.authChangePassword, (_e, current: string, next: string) =>
+    authDriver.changePassword(current, next),
+  );
 
   // 壳 → main:模块导航与激活
   ipcMain.handle(IPC.modulesList, async (): Promise<ModuleEntry[]> => {
@@ -306,6 +337,11 @@ void app.whenReady().then(async () => {
   // 先把 worker 拉起来:其本地 HTTP 在 bootstrap Phase 2 即就绪(早于激活),
   // 壳随后经 HTTP 驱动登录/激活,所以 spawn-first 是 worker 的原生路径。
   worker.start();
+  // 开机复登:有持久化会话则复验后直接进 Shell。不阻塞建窗,authGetState 等它落定。
+  restoreSettled = host.restoreLogin().catch((e: unknown) => {
+    console.error("[shell] 复登失败", e);
+    return false;
+  });
   createWindow();
 
   // 能力模块开机激活(host 驱动,先于门面),其 tool 在 WS/MCP 一起来即可见。

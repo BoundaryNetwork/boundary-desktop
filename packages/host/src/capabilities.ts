@@ -29,6 +29,8 @@ export interface AuthDriver {
   /** 执行登录流程（OAuth/密码流程），成功后返回 token 与用户信息；基座据此置 auth 状态。 */
   login(): Promise<{ token: string; user: UserInfo }>;
   logout(): Promise<void>;
+  /** 开机复登：复验持久化会话则返回，否则 null。无此能力的 driver 省略（视为无可复登）。 */
+  restore?(): Promise<{ token: string; user: UserInfo } | null>;
 }
 
 export interface ApiDriver {
@@ -186,6 +188,15 @@ export class HostServices implements CapabilityHost {
     const { token, user } = await this.#authDriver.login();
     this.#token = token;
     this.#authState.set({ authenticated: true, user });
+  }
+  /** 开机复登：driver 复验出会话则置 token + 已登录态，返回是否复登成功；
+   *  无 restore 能力或无可复登会话时返回 false（走正常登录表单）。 */
+  async restoreLogin(): Promise<boolean> {
+    const restored = await this.#authDriver.restore?.();
+    if (!restored) return false;
+    this.#token = restored.token;
+    this.#authState.set({ authenticated: true, user: restored.user });
+    return true;
   }
   async requestLogout(): Promise<void> {
     await this.#authDriver.logout();

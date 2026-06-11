@@ -5,13 +5,21 @@ import type {
   ActivateRequest,
   HostApi,
   ModuleBridge,
+  LocalStatus,
   ModuleEntry,
+  ProfileInfo,
   SharedState,
+  WorkerInfo,
 } from "../shared/types.js";
 
 const hostApi: HostApi = {
   platform: process.platform,
   env: () => ipcRenderer.invoke(IPC.appEnv) as Promise<string>,
+  worker: {
+    status: () => ipcRenderer.invoke(IPC.workerStatus) as Promise<LocalStatus | null>,
+    info: () => ipcRenderer.invoke(IPC.workerInfo) as Promise<WorkerInfo>,
+    restart: () => ipcRenderer.invoke(IPC.workerRestart) as Promise<void>,
+  },
   auth: {
     getState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
     requestLogin: () => ipcRenderer.invoke(IPC.authRequestLogin) as Promise<void>,
@@ -26,6 +34,13 @@ const hostApi: HostApi = {
       ipcRenderer.on(IPC.authChanged, handler);
       return () => ipcRenderer.removeListener(IPC.authChanged, handler);
     },
+    getProfile: () => ipcRenderer.invoke(IPC.authGetProfile) as Promise<ProfileInfo>,
+    updateProfile: (patch) => ipcRenderer.invoke(IPC.authUpdateProfile, patch) as Promise<ProfileInfo>,
+    changePassword: (current, next) =>
+      ipcRenderer.invoke(IPC.authChangePassword, current, next) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>,
   },
   modules: {
     list: () => ipcRenderer.invoke(IPC.modulesList) as Promise<ModuleEntry[]>,

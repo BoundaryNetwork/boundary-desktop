@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { CircleUserRound } from "lucide-react";
 import type { UserInfo } from "@boundary-desktop/contract";
+import type { ProfileInfo } from "../../shared/types";
 import { Icons } from "./icons";
 
 /** 系统设置弹层。两栏:左分类导航(整高固定)+ 右内容列(固定 header + 可滚 body)。
@@ -118,35 +119,80 @@ export function SettingsModal({
 
 // ── 分页 ──────────────────────────────────────────────────────────────
 
-/** 本地 profile(昵称 / 个性化信息)。无后端,按账号隔离存 localStorage。 */
-type LocalProfile = { nickname: string; preferences: string };
+const valueStyle: CSSProperties = {
+  fontSize: "var(--text-3)",
+  color: "var(--fg-2)",
+  fontFamily: "var(--mono)",
+};
 
-function profileKey(account: string): string {
-  return `boundary.profile.${account}`;
-}
+const errTextStyle: CSSProperties = { fontSize: "var(--text-3)", color: "var(--err)" };
 
-function loadProfile(account: string, fallbackNickname: string): LocalProfile {
-  const raw = localStorage.getItem(profileKey(account));
-  if (raw) {
-    const p = JSON.parse(raw) as Partial<LocalProfile>;
-    return { nickname: p.nickname ?? fallbackNickname, preferences: p.preferences ?? "" };
-  }
-  return { nickname: fallbackNickname, preferences: "" };
-}
-
+/** 个人信息页:开页读 /api/auth/profile,昵称/个性化信息改动经 PATCH 落服务端,
+ *  改密码经 POST。user 仅作 profile 到位前的加载态显示名。 */
 function ProfilePane({ user, onLogout }: { user: UserInfo; onLogout: () => void }): JSX.Element {
-  const account = user.id;
-  const [saved, setSaved] = useState<LocalProfile>(() => loadProfile(account, user.name));
-  const [nickname, setNickname] = useState(saved.nickname);
-  const [preferences, setPreferences] = useState(saved.preferences);
+  const [profile, setProfile] = useState<ProfileInfo | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [preferences, setPreferences] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pwOpen, setPwOpen] = useState(false);
 
-  const dirty = nickname !== saved.nickname || preferences !== saved.preferences;
+  useEffect(() => {
+    let alive = true;
+    window.hostApi.auth.getProfile().then(
+      (p) => {
+        if (!alive) return;
+        setProfile(p);
+        setNickname(p.nickname ?? "");
+        setPreferences(p.preferences ?? "");
+      },
+      (e: unknown) => {
+        if (alive) setLoadError(e instanceof Error ? e.message : String(e));
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  function save(): void {
-    const next: LocalProfile = { nickname: nickname.trim(), preferences };
-    localStorage.setItem(profileKey(account), JSON.stringify(next));
-    setSaved(next);
-    setNickname(next.nickname);
+  if (!profile) {
+    return (
+      <div style={columnStyle}>
+        <div className="bd-section">基本信息</div>
+        <div className="bd-card">
+          <Row title="账号" sub={loadError ? "加载失败" : "加载中…"}>
+            <span style={valueStyle}>{loadError ? "—" : user.name}</span>
+          </Row>
+        </div>
+        {loadError ? (
+          <div className="bd-desc" style={{ marginTop: "var(--space-4)", color: "var(--err)" }}>
+            加载个人信息失败:{loadError}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const dirty =
+    nickname !== (profile.nickname ?? "") || preferences !== (profile.preferences ?? "");
+
+  async function save(): Promise<void> {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const updated = await window.hostApi.auth.updateProfile({
+        nickname: nickname.trim(),
+        preferences,
+      });
+      setProfile(updated);
+      setNickname(updated.nickname ?? "");
+      setPreferences(updated.preferences ?? "");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -154,7 +200,15 @@ function ProfilePane({ user, onLogout }: { user: UserInfo; onLogout: () => void 
       <div className="bd-section">基本信息</div>
       <div className="bd-card">
         <Row title="账号" sub="登录账号,不可修改">
-          <span style={{ fontSize: "var(--text-3)", color: "var(--fg-2)", fontFamily: "var(--mono)" }}>{account}</span>
+          <span style={valueStyle}>{profile.account}</span>
+        </Row>
+        {profile.phone ? (
+          <Row title="手机号" sub="绑定手机号">
+            <span style={valueStyle}>{profile.phone}</span>
+          </Row>
+        ) : null}
+        <Row title="角色" sub="账户角色">
+          <span style={valueStyle}>{profile.role || "—"}</span>
         </Row>
         <Row title="昵称" sub="显示名称">
           <input
@@ -180,21 +234,62 @@ function ProfilePane({ user, onLogout }: { user: UserInfo; onLogout: () => void 
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-6)" }}>
-        <button type="button" className="bd-btn bd-btn--primary" disabled={!dirty} onClick={save}>
-          保存
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "var(--space-5)", marginTop: "var(--space-6)" }}>
+        {saveError ? <span style={errTextStyle}>{saveError}</span> : null}
+        <button type="button" className="bd-btn bd-btn--primary" disabled={!dirty || saving} onClick={save}>
+          {saving ? "保存中…" : "保存"}
         </button>
       </div>
 
       <div className="bd-section">账户与安全</div>
       <div className="bd-card">
-        <EntryRow title="修改密码" sub="设置新的登录密码" onClick={() => {}} />
+        <EntryRow title="修改密码" sub="设置新的登录密码" onClick={() => setPwOpen((v) => !v)} />
+        {pwOpen ? <PasswordForm onDone={() => setPwOpen(false)} /> : null}
         <Row title="退出登录" sub="退出当前账户并返回登录页">
           <button type="button" className="bd-btn bd-btn--danger" onClick={onLogout}>
             <Icons.logout size={15} stroke={1.9} />
             退出登录
           </button>
         </Row>
+      </div>
+    </div>
+  );
+}
+
+/** 修改密码内联表单:当前/新/确认三段,经 POST /api/auth/password 提交。 */
+function PasswordForm({ onDone }: { onDone: () => void }): JSX.Element {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(): Promise<void> {
+    setError(null);
+    if (next !== confirm) {
+      setError("两次输入的新密码不一致");
+      return;
+    }
+    setBusy(true);
+    const res = await window.hostApi.auth.changePassword(current, next);
+    setBusy(false);
+    if (res.ok) onDone();
+    else setError(res.error ?? "修改失败");
+  }
+
+  return (
+    <div style={{ padding: "var(--space-6) var(--space-8)", display: "flex", flexDirection: "column", gap: "var(--space-4)", borderTop: "1px solid var(--line-soft)" }}>
+      <input className="bd-input" type="password" placeholder="当前密码" value={current} onChange={(e) => setCurrent(e.target.value)} />
+      <input className="bd-input" type="password" placeholder="新密码" value={next} onChange={(e) => setNext(e.target.value)} />
+      <input className="bd-input" type="password" placeholder="确认新密码" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      {error ? <span style={errTextStyle}>{error}</span> : null}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-4)" }}>
+        <button type="button" className="bd-btn" onClick={onDone}>
+          取消
+        </button>
+        <button type="button" className="bd-btn bd-btn--primary" disabled={busy || !current || !next} onClick={submit}>
+          {busy ? "提交中…" : "确认修改"}
+        </button>
       </div>
     </div>
   );

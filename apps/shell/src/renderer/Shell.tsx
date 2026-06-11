@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { UserInfo } from "@boundary-desktop/contract";
-import type { ModuleEntry } from "../shared/types";
+import type { LocalStatus, ModuleEntry, WorkerInfo } from "../shared/types";
 import { Icons } from "./components/icons";
 import { navIcon } from "./components/nav-icons";
 import { SettingsModal } from "./components/SettingsModal";
@@ -18,6 +18,8 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [env, setEnv] = useState<string>("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 运行状态页:基座内置页(非模块),开时占满主区、盖住模块内容。
+  const [statusView, setStatusView] = useState(false);
   // 分离到独立窗的 main 模块 id 集合:这些模块在主窗内容区显"已分离"占位卡片。
   const [detachedIds, setDetachedIds] = useState<Set<string>>(new Set());
 
@@ -40,11 +42,11 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
     void window.hostApi.surface.reportForeground(activeId);
   }, [activeId]);
 
-  // 系统设置是基座级全屏弹层(renderer DOM),但 main 模块的 native view 在 DOM 之上会盖住它;
+  // 系统设置弹层与运行状态页都是基座级 renderer DOM,但 main 模块的 native view 在 DOM 之上会盖住它们;
   // 上报开合,main 据此强制隐藏/恢复主窗内所有 surface 的 native view。
   useEffect(() => {
-    void window.hostApi.surface.reportOverlay(settingsOpen);
-  }, [settingsOpen]);
+    void window.hostApi.surface.reportOverlay(settingsOpen || statusView);
+  }, [settingsOpen, statusView]);
 
   // 模块请求前台(如 agent 驱动浏览器导航)→ 切到该模块,rail 高亮 + 区域浮出。
   useEffect(() => window.hostApi.surface.onForegroundRequest((id) => setActiveId(id)), []);
@@ -98,7 +100,12 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
       <LeftRail
         modules={modules}
         activeId={activeId}
-        onSelect={setActiveId}
+        statusActive={statusView}
+        onSelect={(id) => {
+          setActiveId(id);
+          setStatusView(false);
+        }}
+        onOpenStatus={() => setStatusView(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -148,18 +155,26 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
         {/* 模块内容浮在装饰流线之上。macOS 红绿灯落在左侧 rail 顶 strip;主区顶部拖窗带见上。 */}
         <div style={{ position: "relative", zIndex: 1, flex: 1, minHeight: 0 }}>
           {modules.length === 0 ? (
-            <div className="content__placeholder" style={{ height: "100%", display: "grid", placeItems: "center" }}>
-              <p className="content__placeholder-hint">未发现可用模块（检查 modules/ 目录）。</p>
-            </div>
+            statusView ? null : (
+              <div className="content__placeholder" style={{ height: "100%", display: "grid", placeItems: "center" }}>
+                <p className="content__placeholder-hint">未发现可用模块（检查 modules/ 目录）。</p>
+              </div>
+            )
           ) : (
-            // 已打开的模块全部保持挂载(多 active),只切前台可见;非前台 display:none。
+            // 已打开的模块全部保持挂载(多 active),只切前台可见;非前台 / 运行状态页开时 display:none。
             openedIds.map((id) => {
               const entry = modules.find((m) => m.id === id);
               return entry ? (
-                <ModuleView key={id} entry={entry} hidden={id !== activeId} detached={detachedIds.has(id)} />
+                <ModuleView
+                  key={id}
+                  entry={entry}
+                  hidden={id !== activeId || statusView}
+                  detached={detachedIds.has(id)}
+                />
               ) : null;
             })
           )}
+          {statusView ? <StatusPage /> : null}
         </div>
       </main>
     </div>
@@ -170,12 +185,16 @@ export function Shell({ user }: { user: UserInfo }): JSX.Element {
 function LeftRail({
   modules,
   activeId,
+  statusActive,
   onSelect,
+  onOpenStatus,
   onOpenSettings,
 }: {
   modules: ModuleEntry[];
   activeId: string | null;
+  statusActive: boolean;
   onSelect: (id: string) => void;
+  onOpenStatus: () => void;
   onOpenSettings: () => void;
 }): JSX.Element {
   const isMac = window.hostApi.platform === "darwin";
@@ -226,7 +245,7 @@ function LeftRail({
             <RailButton
               key={m.id}
               label={label}
-              active={m.id === activeId}
+              active={!statusActive && m.id === activeId}
               onClick={() => onSelect(m.id)}
               renderIcon={() => <Ic size={22} strokeWidth={1.9} fill="none" />}
             />
@@ -246,6 +265,13 @@ function LeftRail({
         }}
       >
         <RailButton label="帮助" hideLabel renderIcon={() => <Icons.help size={20} stroke={1.8} />} onClick={() => {}} />
+        <RailButton
+          label="运行状态"
+          hideLabel
+          active={statusActive}
+          renderIcon={() => <Icons.pulse size={20} stroke={1.9} />}
+          onClick={onOpenStatus}
+        />
         <RailButton label="系统设置" hideLabel renderIcon={() => <Icons.gear size={18} stroke={1.9} />} onClick={onOpenSettings} />
       </div>
     </aside>
@@ -431,6 +457,341 @@ function ModuleView({
           <p className="content__placeholder-hint">模块加载失败：{err}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- 运行状态页(rail 脉冲按钮 → 主区整页) ---
+
+/** 整体健康 → 徽章色与文案。null = worker 端点尚未就绪(掉线/重启间隙)。 */
+function pageHealth(s: LocalStatus | null): { tone: string; label: string } {
+  if (!s) return { tone: "var(--fg-3)", label: "OFFLINE" };
+  switch (s.status) {
+    case "ok":
+      return { tone: "var(--ok)", label: "ONLINE" };
+    case "pending":
+      return { tone: "var(--accent)", label: "CONNECTING" };
+    case "action_required":
+      return { tone: "var(--warn)", label: "ACTION REQUIRED" };
+    case "degraded":
+      return { tone: "var(--warn)", label: "DEGRADED" };
+    case "error":
+      return { tone: "var(--err)", label: "ERROR" };
+  }
+}
+
+// 本地 worker 进程态(/local/status 的 worker.state)。
+const WORKER_STATE_LABEL: Record<LocalStatus["worker"]["state"], string> = {
+  starting: "启动中",
+  ready: "就绪",
+  draining: "排空中",
+  stopping: "停止中",
+};
+function workerTone(st: LocalStatus["worker"]["state"]): string {
+  return st === "ready" ? "var(--ok)" : st === "starting" ? "var(--accent)" : "var(--warn)";
+}
+// 远程 gRPC 网关连接态(/local/status 的 gateway.state)。
+const GATEWAY_STATE_LABEL: Record<LocalStatus["gateway"]["state"], string> = {
+  disconnected: "未连接",
+  connecting: "连接中",
+  connected: "已连接",
+  reconnecting: "重连中",
+};
+function gatewayTone(st: LocalStatus["gateway"]["state"]): string {
+  return st === "connected" ? "var(--ok)" : st === "disconnected" ? "var(--fg-3)" : "var(--accent)";
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+/** ms 时长 → HH:MM:SS(小时不封顶)。 */
+function formatUptime(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${pad2(Math.floor(total / 3600))}:${pad2(Math.floor((total % 3600) / 60))}:${pad2(total % 60)}`;
+}
+
+/** ms epoch → YYYY-MM-DD HH:MM:SS(本地时区)。 */
+function formatStarted(ms: number): string {
+  const d = new Date(ms);
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+  );
+}
+
+/** 运行状态整页:脉冲健康圈 + ONLINE 徽章 + UPTIME 走字 + 重启 + 版本/PID/启动时间。
+ *  本页可见时才挂载(随 statusView 显隐),挂载即轮询 worker.status,卸载即停。 */
+function StatusPage(): JSX.Element {
+  const [status, setStatus] = useState<LocalStatus | null>(null);
+  const [info, setInfo] = useState<WorkerInfo | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [restarting, setRestarting] = useState(false);
+
+  // 聚合状态轮询:挂载即拉,之后每 2s。null = worker 端点未就绪。
+  useEffect(() => {
+    let alive = true;
+    const pull = (): void => {
+      void window.hostApi.worker.status().then(
+        (s) => {
+          if (alive) setStatus(s);
+        },
+        () => {},
+      );
+    };
+    pull();
+    const t = window.setInterval(pull, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  // 壳侧信息(app 版本 + spawn 时刻):挂载拉一次;重启后再拉(startedAt 变了)。
+  const loadInfo = (): void => {
+    void window.hostApi.worker.info().then(setInfo, () => {});
+  };
+  useEffect(loadInfo, []);
+
+  // UPTIME 每秒走字。
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const restart = (): void => {
+    if (restarting) return;
+    setRestarting(true);
+    setStatus(null); // 立即反映掉线
+    void window.hostApi.worker
+      .restart()
+      .then(loadInfo)
+      .finally(() => setRestarting(false));
+  };
+
+  const { tone, label } = pageHealth(status);
+  const startedAt = info?.startedAt ?? null;
+  const uptime = startedAt != null ? formatUptime(now - startedAt) : "--:--:--";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        padding: "26px 24px 24px",
+        userSelect: "none",
+      }}
+    >
+      <style>{`
+        @keyframes bd-status-breath { 0%,100% { transform: scale(1); opacity: .5 } 50% { transform: scale(1.1); opacity: .85 } }
+        @keyframes bd-status-spin { to { transform: rotate(360deg) } }
+      `}</style>
+
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--fg-0)" }}>运行状态</h1>
+
+      {/* 脉冲健康圈:外发光呼吸 + 虚线环(重启时加速旋转)+ 内圈脉冲图标。
+          flexShrink:0 防止 overflow 列把方形容器纵向压扁成椭圆。 */}
+      <div
+        style={{
+          position: "relative",
+          flex: "none",
+          width: 150,
+          height: 150,
+          marginTop: 18,
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 4,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, color-mix(in oklch, ${tone} 42%, transparent), transparent 68%)`,
+            filter: "blur(8px)",
+            animation: "bd-status-breath 3.2s ease-in-out infinite",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 18,
+            borderRadius: "50%",
+            border: `2px dashed color-mix(in oklch, ${tone} 60%, transparent)`,
+            animation: `bd-status-spin ${restarting ? "1.1s" : "20s"} linear infinite`,
+          }}
+        />
+        <div
+          style={{
+            width: 86,
+            height: 86,
+            borderRadius: "50%",
+            background: `color-mix(in oklch, ${tone} 15%, var(--bg-1))`,
+            display: "grid",
+            placeItems: "center",
+            color: tone,
+            boxShadow: "var(--shadow-1)",
+          }}
+        >
+          <Icons.pulse size={36} stroke={2} />
+        </div>
+      </div>
+
+      {/* 徽章 */}
+      <div
+        style={{
+          marginTop: 14,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          color: tone,
+          fontSize: "var(--text-2)",
+          fontWeight: 600,
+          letterSpacing: "0.12em",
+        }}
+      >
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: tone }} />
+        {label}
+      </div>
+
+      {/* 运行计时 */}
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 48,
+          fontWeight: 700,
+          color: "var(--fg-0)",
+          fontVariantNumeric: "tabular-nums",
+          letterSpacing: "0.04em",
+          lineHeight: 1,
+        }}
+      >
+        {uptime}
+      </div>
+
+      {/* 重启(展示 + 重启;停止服务未接) */}
+      <button
+        type="button"
+        onClick={restart}
+        disabled={restarting}
+        style={{
+          marginTop: 18,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          padding: "8px 18px",
+          borderRadius: "var(--r-3)",
+          border: "1px solid var(--line)",
+          background: "var(--bg-2)",
+          color: "var(--fg-1)",
+          fontSize: "var(--text-2)",
+          fontWeight: 500,
+          fontFamily: "inherit",
+          cursor: restarting ? "default" : "pointer",
+          opacity: restarting ? 0.6 : 1,
+        }}
+      >
+        <Icons.refresh size={15} stroke={1.9} />
+        {restarting ? "重启中…" : "重启"}
+      </button>
+
+      {/* 两个状态:本地 worker 进程 + 远程 gRPC 网关连接 */}
+      <div style={{ display: "flex", gap: "var(--space-5)", width: "100%", maxWidth: 520, marginTop: 22 }}>
+        <StateCard
+          title="本地 Worker"
+          tone={status ? workerTone(status.worker.state) : "var(--fg-3)"}
+          value={status ? WORKER_STATE_LABEL[status.worker.state] : "—"}
+        />
+        <StateCard
+          title="远程网关"
+          tone={status ? gatewayTone(status.gateway.state) : "var(--fg-3)"}
+          value={status ? GATEWAY_STATE_LABEL[status.gateway.state] : "—"}
+          sub={status ? (status.gateway.authenticated ? "已认证" : "未认证") : undefined}
+        />
+      </div>
+
+      {status?.gateway.last_error ? (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            marginTop: "var(--space-4)",
+            color: "var(--err)",
+            fontSize: "var(--text-1)",
+            lineHeight: "var(--lh-3)",
+            wordBreak: "break-all",
+          }}
+        >
+          网关错误：{status.gateway.last_error}
+        </div>
+      ) : null}
+
+      {/* 信息表 */}
+      <div style={{ width: "100%", maxWidth: 520, marginTop: 16 }}>
+        <div style={{ height: 1, background: "var(--line)" }} />
+        <InfoRow k="DESKTOP" v={info?.desktopVersion ?? "—"} />
+        <InfoRow k="WORKER" v={status?.worker.version ?? "—"} />
+        <InfoRow k="PID" v={status ? String(status.worker.pid) : "—"} />
+        <InfoRow k="STARTED" v={startedAt != null ? formatStarted(startedAt) : "—"} />
+      </div>
+    </div>
+  );
+}
+
+/** 单个状态卡:标题 + 色点 + 状态文案(可带副标,如网关认证态)。 */
+function StateCard({
+  title,
+  tone,
+  value,
+  sub,
+}: {
+  title: string;
+  tone: string;
+  value: string;
+  sub?: string;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        padding: "var(--space-6)",
+        borderRadius: "var(--r-4)",
+        border: "1px solid var(--line)",
+        background: "var(--panel-mid-bg)",
+      }}
+    >
+      <div style={{ color: "var(--fg-3)", fontSize: "var(--text-1)", letterSpacing: "0.06em" }}>{title}</div>
+      <div style={{ marginTop: "var(--space-3)", display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+        <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", background: tone, flex: "none" }} />
+        <span style={{ color: "var(--fg-0)", fontSize: "var(--text-4)", fontWeight: 600 }}>{value}</span>
+        {sub ? <span style={{ color: "var(--fg-3)", fontSize: "var(--text-1)" }}>· {sub}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/** 信息表的一行:左 KEY(大写疏排灰),右取值(等宽数字)。 */
+function InfoRow({ k, v }: { k: string; v: string }): JSX.Element {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "var(--space-5)",
+        padding: "9px 2px",
+        borderBottom: "1px solid var(--line-soft)",
+      }}
+    >
+      <span style={{ color: "var(--fg-3)", fontSize: "var(--text-1)", letterSpacing: "0.14em" }}>{k}</span>
+      <span style={{ color: "var(--fg-1)", fontSize: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>{v}</span>
     </div>
   );
 }

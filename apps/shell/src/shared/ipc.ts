@@ -6,6 +6,15 @@ export const IPC = {
   authRequestLogin: "auth:requestLogin",
   authSubmitLogin: "auth:submitLogin",
   authRequestLogout: "auth:requestLogout",
+  // 壳 → main:个人信息页读/改完整 profile(GET/PATCH /api/auth/profile)与改密码(POST /api/auth/password)
+  authGetProfile: "auth:getProfile",
+  authUpdateProfile: "auth:updateProfile",
+  authChangePassword: "auth:changePassword",
+  // 壳 → main:agentworkerd 运行状态页 —— 聚合状态(GET /local/status,public)、
+  // 壳侧信息(app 版本 + worker spawn 时刻)、手动重启
+  workerStatus: "worker:status",
+  workerInfo: "worker:info",
+  workerRestart: "worker:restart",
   modulesList: "modules:list",
   modulesActivate: "modules:activate",
   modulesDeactivate: "modules:deactivate",

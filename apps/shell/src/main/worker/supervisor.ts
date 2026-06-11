@@ -31,6 +31,9 @@ export class WorkerSupervisor {
   #control = new WorkerControlClient(controlSocketPath());
   #child: ChildProcess | null = null;
   #stopping = false;
+  #restarting = false;
+  // 当前这一代 worker 的 spawn 时刻(ms epoch):供运行状态页算 UPTIME / STARTED。每次 spawn 刷新。
+  #startedAt: number | null = null;
   #retryTimer: NodeJS.Timeout | null = null;
   #discoveryTimer: NodeJS.Timeout | null = null;
   #endpoints: WorkerEndpoints = {};
@@ -57,9 +60,40 @@ export class WorkerSupervisor {
     return this.#endpoints;
   }
 
+  /** 当前 worker 这一代的 spawn 时刻(ms epoch);尚未 spawn 为 null。 */
+  startedAt(): number | null {
+    return this.#startedAt;
+  }
+
+  /** 手动重启:优雅停掉当前 worker 再立即重生。`#restarting` 守住与自愈 tick 的竞态
+   *  (置 null 到重生之间若 tick 介入会双 spawn)。重生后端点经发现轮询自然刷新。 */
+  async restart(): Promise<void> {
+    if (this.#restarting || this.#stopping) return;
+    this.#restarting = true;
+    try {
+      const old = this.#child;
+      this.#child = null;
+      this.#endpoints = {};
+      if (old) {
+        try {
+          await this.#control.shutdown();
+        } catch {
+          // 控制端点不可达:worker 可能已在退出,下面统一等。
+        }
+        if (!(await this.#waitExit(old, GRACEFUL_EXIT_TIMEOUT_MS))) {
+          old.kill("SIGKILL");
+          await this.#waitExit(old, 1000);
+        }
+      }
+      this.#spawn(); // 内含 reapOrphans:清掉任何残留再起新一代
+    } finally {
+      this.#restarting = false;
+    }
+  }
+
   /** 崩溃自愈:子进程活着 → noop;已退出 → 重新 spawn。对齐 `run_with_retry`。 */
   #tick(): void {
-    if (this.#stopping) return;
+    if (this.#stopping || this.#restarting) return;
     if (this.#childAlive()) return;
     console.warn("[worker] 子进程不在,重启");
     this.#spawn();
@@ -86,6 +120,7 @@ export class WorkerSupervisor {
       if (this.#child === child) this.#child = null;
     });
     this.#child = child;
+    this.#startedAt = Date.now();
     console.log(`[worker] 已 spawn pid=${child.pid} bin=${bin}`);
   }
 
